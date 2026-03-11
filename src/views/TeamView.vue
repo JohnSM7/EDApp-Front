@@ -53,7 +53,9 @@ const handleFileUpload = (event: Event) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
       const sheetName = workbook.SheetNames[0]
+      if (!sheetName) throw new Error('No sheets found')
       const worksheet = workbook.Sheets[sheetName]
+      if (!worksheet) throw new Error('Worksheet is undefined')
       const json: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet)
       
       players.value = json.map((p, index) => ({
