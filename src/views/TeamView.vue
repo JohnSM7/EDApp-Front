@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { FileUp, Search, Download, User, Activity, Target, Shield } from 'lucide-vue-next'
+import { FileUp, Search, Download, User, Activity, Target, Shield, X, Calendar, TrendingUp } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
 interface Player {
@@ -18,6 +18,7 @@ interface Player {
 const players = ref<Player[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
+const selectedPlayer = ref<Player | null>(null)
 
 const filteredPlayers = computed(() => {
   if (!searchQuery.value) return players.value
@@ -53,7 +54,7 @@ const handleFileUpload = (event: Event) => {
       const workbook = XLSX.read(data, { type: 'array' })
       const sheetName = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[sheetName]
-      const json: any[] = XLSX.utils.sheet_to_json(worksheet)
+      const json: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet)
       
       players.value = json.map((p, index) => ({
         id: index + 1,
@@ -84,6 +85,14 @@ const getPositionColor = (pos: string) => {
   if (p.includes('def')) return '#60a5fa'
   if (p.includes('por')) return '#34d399'
   return '#94a3b8'
+}
+
+const openPlayerProfile = (player: Player) => {
+  selectedPlayer.value = player
+}
+
+const closePlayerProfile = () => {
+  selectedPlayer.value = null
 }
 </script>
 
@@ -170,7 +179,74 @@ const getPositionColor = (pos: string) => {
           </div>
 
           <div class="cromo-footer">
-            <button class="view-btn">Ver Perfil</button>
+            <button class="view-btn" @click="openPlayerProfile(player)">Ver Perfil</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Player Profile Modal -->
+    <div v-if="selectedPlayer" class="modal-overlay" @click.self="closePlayerProfile">
+      <div class="modal glass-card profile-modal">
+        <button class="close-modal-btn" @click="closePlayerProfile">
+          <X :size="24" />
+        </button>
+        
+        <div class="modal-header-profile" :style="{ background: `linear-gradient(135deg, ${getPositionColor(selectedPlayer.posicion)}44 0%, rgba(0,0,0,0) 100%)` }">
+          <div class="profile-photo-container">
+             <img :src="selectedPlayer.foto" :alt="selectedPlayer.nombre" class="profile-photo" />
+             <div class="profile-dorsal" :style="{ color: getPositionColor(selectedPlayer.posicion) }">{{ selectedPlayer.dorsal }}</div>
+          </div>
+          <div class="profile-title">
+            <h2>{{ selectedPlayer.nombre }}</h2>
+            <span class="pos-badge-large" :style="{ backgroundColor: getPositionColor(selectedPlayer.posicion) }">
+              {{ selectedPlayer.posicion }}
+            </span>
+          </div>
+        </div>
+        
+        <div class="modal-body-profile">
+          <div class="profile-stats-grid">
+            <div class="stat-box">
+              <Calendar class="stat-icon" :size="24" />
+              <div class="stat-text">
+                <span class="value">{{ selectedPlayer.edad }}</span>
+                <span class="label">Años</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <Shield class="stat-icon" :size="24" />
+              <div class="stat-text">
+                <span class="value">{{ selectedPlayer.partidos }}</span>
+                <span class="label">Partidos</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <Target class="stat-icon" :size="24" />
+              <div class="stat-text">
+                <span class="value">{{ selectedPlayer.goles }}</span>
+                <span class="label">Goles</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <Activity class="stat-icon" :size="24" />
+              <div class="stat-text">
+                <span class="value">{{ selectedPlayer.asistencias }}</span>
+                <span class="label">Asistencias</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="performance-summary">
+            <h3><TrendingUp :size="18" /> Resumen de Rendimiento</h3>
+            <p v-if="selectedPlayer.partidos > 0">
+              Esta temporada, {{ selectedPlayer.nombre }} ha promediado 
+              <strong>{{ (selectedPlayer.goles / selectedPlayer.partidos).toFixed(2) }}</strong> goles por partido y 
+              ha estado involucrado en {{ selectedPlayer.goles + selectedPlayer.asistencias }} acciones de gol directas.
+            </p>
+            <p v-else>
+              Aún no ha disputado partidos esta temporada.
+            </p>
           </div>
         </div>
       </div>
@@ -425,5 +501,188 @@ const getPositionColor = (pos: string) => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.modal.profile-modal {
+  width: 100%;
+  max-width: 600px;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  animation: modalIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.close-modal-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0,0,0,0.5);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s;
+}
+
+.close-modal-btn:hover {
+  background: rgba(239, 68, 68, 0.8);
+  transform: rotate(90deg);
+}
+
+.modal-header-profile {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 40px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.profile-photo-container {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.profile-photo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+.profile-dorsal {
+  position: absolute;
+  bottom: -10px;
+  right: -10px;
+  background: rgba(0,0,0,0.8);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+  font-weight: 900;
+  font-style: italic;
+}
+
+.profile-title h2 {
+  font-size: 32px;
+  margin: 0 0 12px 0;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.pos-badge-large {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.modal-body-profile {
+  padding: 40px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-box {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s;
+}
+
+.stat-box:hover {
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.stat-icon {
+  color: #3b82f6;
+}
+
+.stat-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-text .value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.stat-text .label {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.performance-summary {
+  background: rgba(59, 130, 246, 0.05);
+  border-left: 4px solid #3b82f6;
+  padding: 24px;
+  border-radius: 0 12px 12px 0;
+}
+
+.performance-summary h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #60a5fa;
+}
+
+.performance-summary p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #e2e8f0;
 }
 </style>

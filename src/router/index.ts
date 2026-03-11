@@ -28,11 +28,23 @@ const router = createRouter({
         name: 'analyst',
         component: () => import('../views/AnalystView.vue'),
         meta: { requiresAuth: true }
+    },
+    {
+        path: '/stats',
+        name: 'stats',
+        component: () => import('../views/StatsView.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/ai-analysis',
+        name: 'ai-analysis',
+        component: () => import('../views/AiAnalysisView.vue'),
+        meta: { requiresAuth: true }
     }
   ]
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next('/login')

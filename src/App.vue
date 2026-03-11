@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from './store/auth'
-import { LayoutDashboard, Users, Video, BarChart2, LogOut } from 'lucide-vue-next'
+import { LayoutDashboard, Users, Video, BarChart2, LogOut, Brain } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
@@ -39,6 +39,11 @@ const handleLogout = () => {
         <router-link to="/stats" class="nav-item" active-class="active">
           <BarChart2 :size="20" />
           <span>Estadísticas</span>
+        </router-link>
+
+        <router-link to="/ai-analysis" class="nav-item ai-btn" active-class="active">
+          <Brain :size="20" />
+          <span>Análisis IA</span>
         </router-link>
       </div>
 
@@ -121,6 +126,25 @@ const handleLogout = () => {
   background: var(--primary);
   color: white;
   box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.ai-btn {
+  margin-top: auto;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.ai-btn:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+}
+
+.ai-btn.active {
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
 }
 
 .content {
