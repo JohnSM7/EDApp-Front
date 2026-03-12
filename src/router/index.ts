@@ -40,6 +40,12 @@ const router = createRouter({
         name: 'ai-analysis',
         component: () => import('../views/AiAnalysisView.vue'),
         meta: { requiresAuth: true }
+    },
+    {
+        path: '/analyst/console',
+        name: 'analyst-console',
+        component: () => import('../views/AnalystConsoleView.vue'),
+        meta: { requiresAuth: false }
     }
   ]
 })
