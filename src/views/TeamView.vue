@@ -1,24 +1,64 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { FileUp, Search, Download, User, Activity, Target, Shield, X, Calendar, TrendingUp } from 'lucide-vue-next'
+import { ref, computed, watch, onMounted } from 'vue'
+import { FileUp, Search, Download, User, Activity, Target, X, Calendar, TrendingUp, PlayCircle, Plus, Video } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
 interface Player {
   id: number;
   nombre: string;
-  posicion: string;
   edad: number;
-  dorsal: number;
-  goles: number;
-  asistencias: number;
-  partidos: number;
+  lugarNacimiento: string;
+  posicion: string;
+  pieDominante: string;
+  lateralidad: string;
+  altura: number; // in cm
+  peso: number;   // in kg
   foto?: string;
+  heatmap?: string; // DataURL or URL
+  videos?: { title: string, url: string }[];
+  dorsal?: number;
 }
 
 const players = ref<Player[]>([])
 const loading = ref(false)
+
+// Persistence Layer
+onMounted(() => {
+  const savedPlayers = localStorage.getItem('edapp_team_players')
+  if (savedPlayers) {
+    try {
+      players.value = JSON.parse(savedPlayers)
+    } catch (e) {
+      console.error('Error loading saved players:', e)
+    }
+  }
+})
+
+watch(players, (newVal) => {
+  localStorage.setItem('edapp_team_players', JSON.stringify(newVal))
+}, { deep: true })
 const searchQuery = ref('')
 const selectedPlayer = ref<Player | null>(null)
+const isAddingPlayer = ref(false)
+const isEditingProfile = ref(false)
+const photoPreview = ref<string | null>(null)
+
+const newPlayer = ref<Omit<Player, 'id'>>({
+  nombre: '',
+  edad: 20,
+  lugarNacimiento: '',
+  posicion: 'Delantero',
+  pieDominante: 'Derecho',
+  lateralidad: 'Derecha',
+  altura: 180,
+  peso: 75,
+  foto: '',
+  heatmap: '',
+  videos: [],
+  dorsal: 1
+})
+
+const editForm = ref<Player | null>(null)
 
 const filteredPlayers = computed(() => {
   if (!searchQuery.value) return players.value
@@ -30,9 +70,18 @@ const filteredPlayers = computed(() => {
 
 const downloadTemplate = () => {
   const template = [
-    { Nombre: 'Lionel Messi', Posicion: 'Delantero', Edad: 36, Dorsal: 10, Goles: 5, Asistencias: 3, Partidos: 10 },
-    { Nombre: 'Luka Modric', Posicion: 'Centrocampista', Edad: 38, Dorsal: 10, Goles: 1, Asistencias: 4, Partidos: 12 },
-    { Nombre: 'Virgil van Dijk', Posicion: 'Defensa', Edad: 32, Dorsal: 4, Goles: 0, Asistencias: 0, Partidos: 11 }
+    { 
+      Nombre: 'Lionel Messi', 
+      Edad: 36, 
+      Lugar_Nacimiento: 'Rosario, Argentina',
+      Posicion: 'Delantero', 
+      Pie_Dominante: 'Izquierdo',
+      Lateralidad: 'Izquierda',
+      Altura_cm: 170,
+      Peso_kg: 72,
+      Dorsal: 10,
+      Foto: '' 
+    }
   ]
   const ws = XLSX.utils.json_to_sheet(template)
   const wb = XLSX.utils.book_new()
@@ -61,13 +110,15 @@ const handleFileUpload = (event: Event) => {
       players.value = json.map((p, index) => ({
         id: index + 1,
         nombre: p.Nombre || p.nombre || 'Jugador',
-        posicion: p.Posicion || p.posicion || 'N/A',
         edad: p.Edad || p.edad || 0,
+        lugarNacimiento: p.Lugar_Nacimiento || p.lugar_nacimiento || 'N/A',
+        posicion: p.Posicion || p.posicion || 'N/A',
+        pieDominante: p.Pie_Dominante || p.pie_dominante || 'Derecho',
+        lateralidad: p.Lateralidad || p.lateralidad || 'Derecha',
+        altura: p.Altura_cm || p.altura || 0,
+        peso: p.Peso_kg || p.peso || 0,
         dorsal: p.Dorsal || p.dorsal || 0,
-        goles: p.Goles || p.goles || 0,
-        asistencias: p.Asistencias || p.asistencias || 0,
-        partidos: p.Partidos || p.partidos || 0,
-        foto: `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.Nombre || index}&backgroundColor=transparent`
+        foto: p.Foto || p.foto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.Nombre || index}&backgroundColor=transparent`
       }))
     } catch (err) {
       console.error('Error parsing excel:', err)
@@ -96,6 +147,131 @@ const openPlayerProfile = (player: Player) => {
 const closePlayerProfile = () => {
   selectedPlayer.value = null
 }
+
+const addPlayer = () => {
+  const idValue = players.value.length > 0 ? Math.max(...players.value.map(p => p.id)) + 1 : 1
+  players.value.push({
+    ...newPlayer.value,
+    id: idValue,
+    foto: newPlayer.value.foto || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newPlayer.value.nombre || 'new'}&backgroundColor=transparent`
+  })
+  isAddingPlayer.value = false
+  photoPreview.value = null
+  // Reset form
+  newPlayer.value = {
+    nombre: '',
+    edad: 20,
+    lugarNacimiento: '',
+    posicion: 'Delantero',
+    pieDominante: 'Derecho',
+    lateralidad: 'Derecha',
+    altura: 180,
+    peso: 75,
+    foto: '',
+    heatmap: '',
+    videos: [],
+    dorsal: 1
+  }
+}
+
+const handlePhotoUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const result = e.target?.result as string
+    newPlayer.value.foto = result
+    photoPreview.value = result
+  }
+  reader.readAsDataURL(file)
+}
+
+const startEditing = () => {
+  if (selectedPlayer.value) {
+    editForm.value = { ...selectedPlayer.value }
+    photoPreview.value = selectedPlayer.value.foto || null
+    isEditingProfile.value = true
+  }
+}
+
+const updatePlayer = () => {
+  if (editForm.value) {
+    const index = players.value.findIndex(p => p.id === editForm.value!.id)
+    if (index !== -1) {
+      players.value[index] = { ...editForm.value }
+      selectedPlayer.value = { ...editForm.value }
+    }
+    isEditingProfile.value = false
+    photoPreview.value = null
+  }
+}
+
+const deletePlayer = (id: number) => {
+  if (confirm('¿Estás seguro de que quieres eliminar a este jugador de la plantilla?')) {
+    players.value = players.value.filter(p => p.id !== id)
+    selectedPlayer.value = null
+  }
+}
+
+const handleEditPhotoUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file || !editForm.value) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const result = e.target?.result as string
+    editForm.value!.foto = result
+    photoPreview.value = result
+  }
+  reader.readAsDataURL(file)
+}
+
+const handleHeatmapUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const result = e.target?.result as string
+    newPlayer.value.heatmap = result
+  }
+  reader.readAsDataURL(file)
+}
+
+const handleEditHeatmapUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file || !editForm.value) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const result = e.target?.result as string
+    editForm.value!.heatmap = result
+  }
+  reader.readAsDataURL(file)
+}
+
+const videoTemp = ref({ title: '', url: '' })
+
+const addVideoToNew = () => {
+  if (videoTemp.value.title && videoTemp.value.url) {
+    if (!newPlayer.value.videos) newPlayer.value.videos = []
+    newPlayer.value.videos.push({ ...videoTemp.value })
+    videoTemp.value = { title: '', url: '' }
+  }
+}
+
+const addVideoToEdit = () => {
+  if (videoTemp.value.title && videoTemp.value.url && editForm.value) {
+    if (!editForm.value.videos) editForm.value.videos = []
+    editForm.value.videos.push({ ...videoTemp.value })
+    videoTemp.value = { title: '', url: '' }
+  }
+}
 </script>
 
 <template>
@@ -104,6 +280,10 @@ const closePlayerProfile = () => {
       <div class="header-main">
         <h1>Mi Equipo</h1>
         <div class="actions">
+          <button @click="isAddingPlayer = true" class="studio-btn-secondary">
+            <User :size="18" />
+            Nuevo Jugador
+          </button>
           <button @click="downloadTemplate" class="studio-btn-secondary">
             <Download :size="18" />
             Descargar Plantilla
@@ -118,23 +298,13 @@ const closePlayerProfile = () => {
       <p>Gestiona la plantilla cargando tus datos desde Excel. Visualiza perfiles y estadísticas detalladas.</p>
     </header>
 
-    <div v-if="players.length === 0 && !loading" class="empty-state glass-card gold-border">
-      <div class="empty-icon-studio">
-        <User :size="48" />
-      </div>
-      <h3>Plantilla Vacía</h3>
-      <p>Importa tu archivo Excel para generar los cromos de los jugadores.</p>
-      <button @click="downloadTemplate" class="text-btn">
-        ¿No tienes la plantilla? Descárgala aquí
-      </button>
-    </div>
 
     <div v-if="loading" class="loading-state">
       <div class="studio-spinner"></div>
       <p>Generando fichas de jugadores...</p>
     </div>
 
-    <div v-if="players.length > 0" class="team-container">
+    <div v-if="!loading" class="team-container">
       <div class="team-toolbar">
         <div class="search-box-studio">
           <Search :size="18" />
@@ -146,6 +316,15 @@ const closePlayerProfile = () => {
       </div>
 
       <div class="players-grid">
+        <!-- Add Player Card -->
+        <div class="add-player-card glass-card gold-border" @click="isAddingPlayer = true">
+          <div class="add-icon">
+            <Activity :size="32" />
+          </div>
+          <h3>Agregar Jugador</h3>
+          <p>Individual</p>
+        </div>
+
         <div v-for="player in filteredPlayers" :key="player.id" class="player-cromo glass-card">
           <div class="cromo-bg" :style="{ background: `linear-gradient(135deg, ${getPositionColor(player.posicion)}22 0%, rgba(0,0,0,0) 100%)` }"></div>
           
@@ -164,18 +343,18 @@ const closePlayerProfile = () => {
             <div class="stats-cromos">
               <div class="stat-item">
                 <Target :size="14" />
-                <span class="val">{{ player.goles }}</span>
-                <span class="lab">Goles</span>
+                <span class="val">{{ player.altura }}</span>
+                <span class="lab">cm</span>
               </div>
               <div class="stat-item">
                 <Activity :size="14" />
-                <span class="val">{{ player.asistencias }}</span>
-                <span class="lab">Asist</span>
+                <span class="val">{{ player.peso }}</span>
+                <span class="lab">kg</span>
               </div>
               <div class="stat-item">
-                <Shield :size="14" />
-                <span class="val">{{ player.partidos }}</span>
-                <span class="lab">Part</span>
+                <TrendingUp :size="14" />
+                <span class="val">{{ player.pieDominante === 'Derecho' ? 'R' : player.pieDominante === 'Izquierdo' ? 'L' : 'B' }}</span>
+                <span class="lab">Pie</span>
               </div>
             </div>
           </div>
@@ -183,6 +362,114 @@ const closePlayerProfile = () => {
           <div class="cromo-footer">
             <button class="view-btn" @click="openPlayerProfile(player)">Ver Perfil</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Player Modal -->
+    <div v-if="isAddingPlayer" class="modal-overlay" @click.self="isAddingPlayer = false">
+      <div class="modal glass-card player-form-modal">
+        <div class="modal-header">
+          <h2>Nuevo Jugador</h2>
+          <button @click="isAddingPlayer = false" class="icon-btn-circle"><X :size="20" /></button>
+        </div>
+        <div class="modal-body">
+          <div class="photo-upload-section">
+            <div class="photo-preview-large glass-card">
+              <img v-if="photoPreview" :src="photoPreview" class="preview-img" />
+              <User v-else :size="48" class="placeholder-icon" />
+            </div>
+            <label class="studio-btn-secondary mini">
+              <FileUp :size="14" />
+              {{ photoPreview ? 'Cambiar Foto' : 'Subir Foto' }}
+              <input type="file" @change="handlePhotoUpload" accept="image/*" hidden />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Nombre Completo</label>
+              <input v-model="newPlayer.nombre" type="text" placeholder="Ej: Pedri" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Edad</label>
+              <input v-model.number="newPlayer.edad" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Lugar de Nacimiento</label>
+              <input v-model="newPlayer.lugarNacimiento" type="text" placeholder="Ciudad, País" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Posición</label>
+              <select v-model="newPlayer.posicion" class="studio-input">
+                <option>Portero</option>
+                <option>Defensa</option>
+                <option>Centrocampista</option>
+                <option>Delantero</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Pie Dominante</label>
+              <select v-model="newPlayer.pieDominante" class="studio-input">
+                <option>Derecho</option>
+                <option>Izquierdo</option>
+                <option>Ambidiestro</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Lateralidad</label>
+              <select v-model="newPlayer.lateralidad" class="studio-input">
+                <option>Derecha</option>
+                <option>Izquierda</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Altura (cm)</label>
+              <input v-model.number="newPlayer.altura" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Peso (kg)</label>
+              <input v-model.number="newPlayer.peso" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Dorsal</label>
+              <input v-model.number="newPlayer.dorsal" type="number" class="studio-input">
+            </div>
+          </div>
+
+          <div class="analysis-form-section">
+            <h4><Target :size="16" /> Análisis Táctico (Mapa de Calor)</h4>
+            <div class="heatmap-upload-area">
+              <div v-if="newPlayer.heatmap" class="heatmap-preview-mini">
+                <img :src="newPlayer.heatmap" />
+              </div>
+              <label class="studio-btn-secondary mini">
+                <FileUp :size="14" />
+                {{ newPlayer.heatmap ? 'Cambiar Mapa' : 'Subir Mapa de Calor' }}
+                <input type="file" @change="handleHeatmapUpload" accept="image/*" hidden />
+              </label>
+            </div>
+          </div>
+
+          <div class="analysis-form-section">
+            <h4><Video :size="16" /> Vídeos de Referencia</h4>
+            <div class="video-add-form">
+              <input v-model="videoTemp.title" type="text" placeholder="Título (Ej: Scouting vs Madrid)" class="studio-input">
+              <input v-model="videoTemp.url" type="text" placeholder="URL del vídeo" class="studio-input">
+              <button @click="addVideoToNew" class="icon-btn-circle plus-btn"><Plus :size="16" /></button>
+            </div>
+            <div class="video-list-mini" v-if="newPlayer.videos && newPlayer.videos.length > 0">
+              <div v-for="(v, i) in newPlayer.videos" :key="i" class="v-mini-item">
+                <Video :size="12" />
+                <span>{{ v.title }}</span>
+                <button @click="newPlayer.videos.splice(i, 1)" class="remove-v">×</button>
+              </div>
+            </div>
+          </div>
+
+          <button @click="addPlayer" class="studio-btn-primary full-width margin-top">
+            Añadir a la Plantilla
+          </button>
         </div>
       </div>
     </div>
@@ -207,49 +494,205 @@ const closePlayerProfile = () => {
           </div>
         </div>
         
-        <div class="modal-body-profile">
-          <div class="profile-stats-grid">
-            <div class="stat-box">
-              <Calendar class="stat-icon" :size="24" />
-              <div class="stat-text">
-                <span class="value">{{ selectedPlayer.edad }}</span>
-                <span class="label">Años</span>
+        <div class="modal-body-profile extended-layout">
+          <!-- Left Column: Biography -->
+          <div class="profile-left-col">
+            <div class="profile-stats-grid biographical">
+              <div class="bio-item">
+                <Calendar class="bio-icon" :size="20" />
+                <div class="bio-content">
+                  <span class="bio-label">Edad</span>
+                  <span class="bio-val">{{ selectedPlayer.edad }} años</span>
+                </div>
+              </div>
+              <div class="bio-item">
+                <Search class="bio-icon" :size="20" />
+                <div class="bio-content">
+                  <span class="bio-label">Nacimiento</span>
+                  <span class="bio-val">{{ selectedPlayer.lugarNacimiento }}</span>
+                </div>
+              </div>
+              <div class="bio-item">
+                <Target class="bio-icon" :size="20" />
+                <div class="bio-content">
+                  <span class="bio-label">Pie Dominante</span>
+                  <span class="bio-val">{{ selectedPlayer.pieDominante }}</span>
+                </div>
+              </div>
+              <div class="bio-item">
+                <Activity class="bio-icon" :size="20" />
+                <div class="bio-content">
+                  <span class="bio-label">Lateralidad</span>
+                  <span class="bio-val">{{ selectedPlayer.lateralidad }}</span>
+                </div>
+              </div>
+              <div class="bio-item">
+                <TrendingUp class="bio-icon" :size="20" />
+                <div class="bio-content">
+                  <span class="bio-label">Altura / Peso</span>
+                  <span class="bio-val">{{ selectedPlayer.altura }} cm / {{ selectedPlayer.peso }} kg</span>
+                </div>
               </div>
             </div>
-            <div class="stat-box">
-              <Shield class="stat-icon" :size="24" />
-              <div class="stat-text">
-                <span class="value">{{ selectedPlayer.partidos }}</span>
-                <span class="label">Partidos</span>
+
+            <div class="profile-actions-footer">
+              <button @click="startEditing" class="studio-btn-secondary full-width">
+                <Activity :size="18" />
+                Editar Jugador
+              </button>
+              <button @click="deletePlayer(selectedPlayer.id)" class="delete-btn-text">
+                Eliminar Jugador
+              </button>
+            </div>
+          </div>
+
+          <!-- Right Column: Analysis -->
+          <div class="profile-right-col">
+            <div class="analysis-section heatmap-container glass-card">
+              <div class="section-header">
+                <h3><Target :size="20" /> Mapa de Calor (Zona de Influencia)</h3>
+              </div>
+              <div class="heatmap-canvas">
+                <img v-if="selectedPlayer.heatmap" :src="selectedPlayer.heatmap" class="heatmap-img" />
+                <div v-else class="heatmap-placeholder">
+                  <div class="field-lines"></div>
+                  <div class="heat-blob"></div>
+                  <span class="placeholder-text">Sube un mapa de calor en la edición</span>
+                </div>
               </div>
             </div>
-            <div class="stat-box">
-              <Target class="stat-icon" :size="24" />
-              <div class="stat-text">
-                <span class="value">{{ selectedPlayer.goles }}</span>
-                <span class="label">Goles</span>
+
+            <div class="analysis-section videos-container glass-card">
+              <div class="section-header">
+                <h3><Video :size="20" /> Videos de Referencia / Scouting</h3>
+              </div>
+              <div class="videos-grid">
+                <div v-if="selectedPlayer.videos && selectedPlayer.videos.length > 0" class="video-list">
+                  <div v-for="(vid, idx) in selectedPlayer.videos" :key="idx" class="video-reference-item glass-card">
+                    <div class="video-thumb">
+                      <PlayCircle :size="32" />
+                    </div>
+                    <div class="video-info">
+                      <span class="video-title">{{ vid.title }}</span>
+                      <a :href="vid.url" target="_blank" class="video-link">Ver Análisis</a>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="empty-videos">
+                  <Video :size="48" />
+                  <p>Aún no hay videos vinculados a este perfil</p>
+                </div>
               </div>
             </div>
-            <div class="stat-box">
-              <Activity class="stat-icon" :size="24" />
-              <div class="stat-text">
-                <span class="value">{{ selectedPlayer.asistencias }}</span>
-                <span class="label">Asistencias</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Player Modal -->
+    <div v-if="isEditingProfile && editForm" class="modal-overlay" @click.self="isEditingProfile = false">
+      <div class="modal glass-card player-form-modal">
+        <div class="modal-header">
+          <h2>Editar Jugador: {{ editForm.nombre }}</h2>
+          <button @click="isEditingProfile = false" class="icon-btn-circle"><X :size="20" /></button>
+        </div>
+        <div class="modal-body">
+          <div class="photo-upload-section">
+            <div class="photo-preview-large glass-card">
+              <img v-if="photoPreview" :src="photoPreview" class="preview-img" />
+              <User v-else :size="48" class="placeholder-icon" />
+            </div>
+            <label class="studio-btn-secondary mini">
+              <FileUp :size="14" />
+              Cambiar Foto
+              <input type="file" @change="handleEditPhotoUpload" accept="image/*" hidden />
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Nombre Completo</label>
+              <input v-model="editForm.nombre" type="text" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Edad</label>
+              <input v-model.number="editForm.edad" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Lugar de Nacimiento</label>
+              <input v-model="editForm.lugarNacimiento" type="text" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Posición</label>
+              <select v-model="editForm.posicion" class="studio-input">
+                <option>Portero</option>
+                <option>Defensa</option>
+                <option>Centrocampista</option>
+                <option>Delantero</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Pie Dominante</label>
+              <select v-model="editForm.pieDominante" class="studio-input">
+                <option>Derecho</option>
+                <option>Izquierdo</option>
+                <option>Ambidiestro</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Lateralidad</label>
+              <select v-model="editForm.lateralidad" class="studio-input">
+                <option>Derecha</option>
+                <option>Izquierda</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Altura (cm)</label>
+              <input v-model.number="editForm.altura" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Peso (kg)</label>
+              <input v-model.number="editForm.peso" type="number" class="studio-input">
+            </div>
+            <div class="input-group">
+              <label>Dorsal</label>
+              <input v-model.number="editForm.dorsal" type="number" class="studio-input">
+            </div>
+          </div>
+
+          <div class="analysis-form-section">
+            <h4><Target :size="16" /> Análisis Táctico (Mapa de Calor)</h4>
+            <div class="heatmap-upload-area">
+              <div v-if="editForm.heatmap" class="heatmap-preview-mini">
+                <img :src="editForm.heatmap" />
+              </div>
+              <label class="studio-btn-secondary mini">
+                <FileUp :size="14" />
+                {{ editForm.heatmap ? 'Cambiar Mapa' : 'Subir Mapa de Calor' }}
+                <input type="file" @change="handleEditHeatmapUpload" accept="image/*" hidden />
+              </label>
+            </div>
+          </div>
+
+          <div class="analysis-form-section">
+            <h4><Video :size="16" /> Vídeos de Referencia</h4>
+            <div class="video-add-form">
+              <input v-model="videoTemp.title" type="text" placeholder="Título del vídeo" class="studio-input">
+              <input v-model="videoTemp.url" type="text" placeholder="URL del vídeo" class="studio-input">
+              <button @click="addVideoToEdit" class="icon-btn-circle plus-btn"><Plus :size="16" /></button>
+            </div>
+            <div class="video-list-mini" v-if="editForm.videos && editForm.videos.length > 0">
+              <div v-for="(v, i) in editForm.videos" :key="i" class="v-mini-item">
+                <Video :size="12" />
+                <span>{{ v.title }}</span>
+                <button @click="editForm.videos.splice(i, 1)" class="remove-v">×</button>
               </div>
             </div>
           </div>
 
-          <div class="performance-summary">
-            <h3><TrendingUp :size="18" /> Resumen de Rendimiento</h3>
-            <p v-if="selectedPlayer.partidos > 0">
-              Esta temporada, {{ selectedPlayer.nombre }} ha promediado 
-              <strong>{{ (selectedPlayer.goles / selectedPlayer.partidos).toFixed(2) }}</strong> goles por partido y 
-              ha estado involucrado en {{ selectedPlayer.goles + selectedPlayer.asistencias }} acciones de gol directas.
-            </p>
-            <p v-else>
-              Aún no ha disputado partidos esta temporada.
-            </p>
-          </div>
+          <button @click="updatePlayer" class="studio-btn-primary full-width margin-top">
+            Guardar Cambios
+          </button>
         </div>
       </div>
     </div>
@@ -501,6 +944,229 @@ const closePlayerProfile = () => {
   margin: 0 auto 16px;
 }
 
+/* Add Player Card */
+.add-player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+  cursor: pointer;
+  border-style: dashed;
+  background: rgba(59, 130, 246, 0.03);
+  transition: all 0.3s;
+  min-height: 280px;
+}
+
+.add-player-card:hover {
+  background: rgba(59, 130, 246, 0.08);
+  transform: translateY(-5px);
+  border-color: #3b82f6;
+}
+
+.add-icon {
+  width: 64px;
+  height: 64px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #3b82f6;
+  margin-bottom: 20px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.add-player-card h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.add-player-card p {
+  color: #94a3b8;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Manual Form Modal */
+.player-form-modal {
+  width: 100%;
+  max-width: 500px;
+  background: #1e293b;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.studio-input {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+}
+
+.studio-input:focus {
+  border-color: #3b82f6;
+  outline: none;
+}
+
+.stats-form-group {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.stats-form-group h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #fbbf24;
+}
+
+.icon-btn-circle {
+  background: rgba(255,255,255,0.05);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Photo Upload */
+.photo-upload-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.photo-preview-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder-icon {
+  color: rgba(255,255,255,0.2);
+}
+
+.studio-btn-secondary.mini {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Biographical Profile Styles */
+.profile-stats-grid.biographical {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.bio-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255,255,255,0.03);
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.bio-icon {
+  color: #3b82f6;
+  opacity: 0.8;
+}
+
+.bio-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.bio-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+
+.bio-val {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+}
+
+.delete-btn-text {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.delete-btn-text:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.full-width { width: 100%; }
+.margin-top { margin-top: 24px; }
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -519,12 +1185,17 @@ const closePlayerProfile = () => {
 }
 
 .modal.profile-modal {
-  width: 100%;
-  max-width: 600px;
+  width: 95vw;
+  max-width: 1200px;
+  max-height: 90vh;
   padding: 0;
   position: relative;
-  overflow: hidden;
-  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  background: #111827;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: modalIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -559,49 +1230,50 @@ const closePlayerProfile = () => {
 .modal-header-profile {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 40px;
+  gap: 20px;
+  padding: 16px 32px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(0,0,0,0.2);
 }
 
 .profile-photo-container {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 50px;
+  height: 50px;
   background: rgba(0,0,0,0.3);
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .profile-photo {
-  width: 100px;
-  height: 100px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
 }
+ Arkansas
 
 .profile-dorsal {
   position: absolute;
-  bottom: -10px;
-  right: -10px;
-  background: rgba(0,0,0,0.8);
-  width: 44px;
-  height: 44px;
+  bottom: -4px;
+  right: -4px;
+  background: #3b82f6;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.1);
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 20px;
-  font-weight: 900;
-  font-style: italic;
+  font-size: 10px;
+  font-weight: 800;
+  color: white;
 }
 
 .profile-title h2 {
-  font-size: 32px;
-  margin: 0 0 12px 0;
+  font-size: 24px;
+  margin: 0 0 4px 0;
   text-shadow: 0 2px 10px rgba(0,0,0,0.5);
 }
 
@@ -616,8 +1288,170 @@ const closePlayerProfile = () => {
   letter-spacing: 1px;
 }
 
-.modal-body-profile {
+.modal-body-profile.extended-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 32px;
+  padding: 32px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.profile-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.profile-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.analysis-section {
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.05);
+  height: 100%;
+}
+
+.section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  color: #60a5fa;
+  margin: 0 0 20px 0;
+}
+
+/* Heatmap Canvas */
+.heatmap-canvas {
+  width: 100%;
+  aspect-ratio: 1.6/1;
+  background: #0f172a;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.heatmap-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.heatmap-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+}
+
+.field-lines {
+  position: absolute;
+  top: 10%; bottom: 10%; left: 5%; right: 5%;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.field-lines::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  border-left: 1px solid rgba(255,255,255,0.1);
+}
+
+.heat-blob {
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0) 70%);
+  filter: blur(8px);
+  position: absolute;
+  top: 40%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.placeholder-text {
+  z-index: 2;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Reference Videos */
+.videos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.video-reference-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.video-reference-item:hover {
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.video-thumb {
+  width: 56px;
+  height: 56px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #60a5fa;
+}
+
+.video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.video-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.video-link {
+  font-size: 12px;
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.video-link:hover {
+  text-decoration: underline;
+}
+
+.empty-videos {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 40px;
+  color: #475569;
+  gap: 12px;
+}
+
+.empty-videos p {
+  margin: 0;
+  font-size: 14px;
 }
 
 .profile-stats-grid {
@@ -681,10 +1515,86 @@ const closePlayerProfile = () => {
   color: #60a5fa;
 }
 
-.performance-summary p {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
-  color: #e2e8f0;
+/* Analysis Form Sections */
+.analysis-form-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.analysis-form-section h4 {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #60a5fa;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.heatmap-upload-area {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.heatmap-preview-mini {
+  width: 100px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #000;
+}
+
+.heatmap-preview-mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.video-add-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom:  profile-stats-grid;
+}
+
+.video-add-form .studio-input {
+  flex: 1;
+  font-size: 12px;
+}
+
+.plus-btn {
+  background: #3b82f6 !important;
+  flex-shrink: 0;
+}
+
+.video-list-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.v-mini-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  color: #60a5fa;
+}
+
+.remove-v {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0 0 0 4px;
 }
 </style>

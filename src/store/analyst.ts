@@ -10,6 +10,16 @@ export interface Tag {
   durationAfter: number  // seconds after click
 }
 
+export interface Drawing {
+  id: string
+  time: number
+  tool: 'pencil' | 'line' | 'arrow' | 'circle' | 'rect'
+  points: { x: number, y: number }[]
+  color: string
+  baseWidth: number
+  baseHeight: number
+}
+
 export interface Clip {
   id: string
   name: string
@@ -52,16 +62,34 @@ export const useAnalystStore = defineStore('analyst', () => {
     { id: '20', label: 'Falta Ofen.', color: '#3b82f6', category: 'BP Ofen.', durationBefore: 5, durationAfter: 10 }
   ])
 
+  const drawings = ref<Drawing[]>([])
   const clips = ref<Clip[]>([])
 
-  const addTag = (label: string, color: string, category: string, durationBefore: number, durationAfter: number) => {
+  // Persistence logic
+  const saveToStorage = () => {
+    localStorage.setItem('edapp_analyst_drawings', JSON.stringify(drawings.value))
+    localStorage.setItem('edapp_analyst_clips', JSON.stringify(clips.value))
+  }
+
+  const loadStoredData = () => {
+    const savedDrawings = localStorage.getItem('edapp_analyst_drawings')
+    const savedClips = localStorage.getItem('edapp_analyst_clips')
+    
+    if (savedDrawings) {
+      try { drawings.value = JSON.parse(savedDrawings) } catch(e) {}
+    }
+    if (savedClips) {
+      try { clips.value = JSON.parse(savedClips) } catch(e) {}
+    }
+  }
+
+  // Load on init
+  loadStoredData()
+
+  const addTag = (tag: Omit<Tag, 'id'>) => {
     tags.value.push({
-      id: Date.now().toString(),
-      label,
-      color,
-      category,
-      durationBefore,
-      durationAfter
+      ...tag,
+      id: Date.now().toString()
     })
   }
 
@@ -74,11 +102,43 @@ export const useAnalystStore = defineStore('analyst', () => {
       ...clip,
       id: Date.now().toString()
     })
+    saveToStorage()
   }
 
   const removeClip = (id: string) => {
     clips.value = clips.value.filter(c => c.id !== id)
+    saveToStorage()
   }
 
-  return { tags, clips, addTag, removeTag, addClip, removeClip }
+  const addDrawing = (drawing: Omit<Drawing, 'id'>) => {
+    drawings.value.push({
+      ...drawing,
+      id: Math.random().toString(36).substr(2, 9)
+    })
+    saveToStorage()
+  }
+
+  const removeDrawing = (id: string) => {
+    drawings.value = drawings.value.filter(d => d.id !== id)
+    saveToStorage()
+  }
+
+  const clearDrawingsAt = (time: number) => {
+    const threshold = 0.8
+    drawings.value = drawings.value.filter(d => Math.abs(d.time - time) > threshold)
+    saveToStorage()
+  }
+
+  return { 
+    tags, 
+    clips, 
+    drawings, 
+    addTag, 
+    removeTag, 
+    addClip, 
+    removeClip, 
+    addDrawing, 
+    removeDrawing, 
+    clearDrawingsAt 
+  }
 })

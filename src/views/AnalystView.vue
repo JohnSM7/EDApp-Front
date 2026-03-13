@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { 
   Video, Scissors, Pencil, Trash2, 
   Download, Play, Pause, RotateCcw, Settings2,
-  X, Save, Layout, FileText, Loader2, PlayCircle, Check
+  X, Save, Layout, FileText, Loader2, PlayCircle, Check,
+  Volume2, VolumeX, Maximize
 } from 'lucide-vue-next'
 import { useAnalystStore, type Clip } from '../store/analyst'
 import DrawingLayer from '../components/DrawingLayer.vue'
@@ -16,6 +17,8 @@ const videoUrl = ref<string | null>(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
+const volume = ref(1)
+const isMuted = ref(false)
 
 // Workspace States
 const isDrawing = ref(false)
@@ -47,7 +50,35 @@ consoleChannel.onmessage = (event) => {
   if (event.data.type === 'RESTORE_CONSOLE') {
     isConsoleExternal.value = false
   }
+  if (event.data.type === 'SKIP_VIDEO') {
+    skipTime(event.data.amount)
+  }
+  if (event.data.type === 'TOGGLE_PLAY') {
+    togglePlay()
+  }
+  if (event.data.type === 'TOGGLE_MUTE') {
+    toggleMute()
+  }
+  if (event.data.type === 'SET_VOLUME') {
+    updateVolume(event.data.volume)
+  }
+  if (event.data.type === 'TOGGLE_FULLSCREEN') {
+    toggleFullscreen()
+  }
+  if (event.data.type === 'REQUEST_STATE') {
+    consoleChannel.postMessage({
+      type: 'STATE_UPDATE',
+      state: { isPlaying: isPlaying.value, volume: volume.value, isMuted: isMuted.value }
+    })
+  }
 }
+
+watch([isPlaying, volume, isMuted], ([newIsPlaying, newVolume, newIsMuted]) => {
+  consoleChannel.postMessage({
+    type: 'STATE_UPDATE',
+    state: { isPlaying: newIsPlaying, volume: newVolume, isMuted: newIsMuted }
+  })
+})
 
 const openConsoleWindow = () => {
   const width = 850
@@ -174,6 +205,29 @@ const handleSave = () => {
 
 onUnmounted(() => {
   stopPreview()
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
+const handleKeyDown = (event: KeyboardEvent) => {
+  // Evitar que las flechas o el espacio disparen el scroll de la página si el foco está cerca o en el video
+  if (['ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
+    // Si estamos escribiendo en un input o textarea, no hacemos nada
+    const target = event.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+    event.preventDefault()
+    if (event.key === 'ArrowLeft') {
+      skipTime(-5)
+    } else if (event.key === 'ArrowRight') {
+      skipTime(5)
+    } else if (event.key === ' ') {
+      togglePlay()
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
 })
 
 const handleVideoUpload = (event: Event) => {
@@ -224,6 +278,36 @@ const seekTo = (time: number) => {
   if (!videoElement.value) return
   videoElement.value.currentTime = time
   currentTime.value = time
+}
+
+const toggleMute = () => {
+  if (!videoElement.value) return
+  isMuted.value = !isMuted.value
+  videoElement.value.muted = isMuted.value
+}
+
+const updateVolume = (val: number) => {
+  if (!videoElement.value) return
+  volume.value = val
+  videoElement.value.volume = val
+  if (val > 0) {
+    isMuted.value = false
+    videoElement.value.muted = false
+  }
+}
+
+const toggleFullscreen = () => {
+  if (!videoElement.value) return
+  const container = videoElement.value.parentElement
+  if (!container) return
+
+  if (!document.fullscreenElement) {
+    container.requestFullscreen().catch(err => {
+      console.error(`Error attempting to enable full-screen mode: ${err.message}`)
+    })
+  } else {
+    document.exitFullscreen()
+  }
 }
 
 const createClip = (tag: any) => {
@@ -289,7 +373,7 @@ const downloadClipAsMP4 = async (clip: Clip) => {
     }, 100)
 
     // We record the segment from the player
-    const { blob, extension } = await recordVideoSegment(videoElement.value, clip.startTime, clip.endTime)
+    const { blob, extension } = await recordVideoSegment(videoElement.value, clip.startTime, clip.endTime, analystStore.drawings)
     clearInterval(progressInterval)
     
     // Create URL with explicit mime-type and trigger a robust download
@@ -346,7 +430,7 @@ const downloadAllClips = async () => {
       }
       
       try {
-        const { blob, extension } = await recordVideoSegment(videoElement.value, clip.startTime, clip.endTime)
+        const { blob, extension } = await recordVideoSegment(videoElement.value, clip.startTime, clip.endTime, analystStore.drawings)
         
         const sanitizedName = clip.name
           .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -447,7 +531,7 @@ const downloadAllClips = async () => {
               @loadedmetadata="duration = ($event.target as HTMLVideoElement).duration"
               class="main-video"
             ></video>
-            <DrawingLayer :active="isDrawing" />
+            <DrawingLayer :active="isDrawing" :current-time="currentTime" />
           </div>
 
           <!-- Professional Transport Controls -->
@@ -466,9 +550,27 @@ const downloadAllClips = async () => {
                   <Play v-else :size="24" />
                 </button>
                 <button @click="skipTime(5)" class="transport-btn">+5s <RotateCcw :size="18" style="transform: scaleX(-1)" /></button>
+                
+                <div class="volume-control">
+                  <button @click="toggleMute" class="transport-btn">
+                    <VolumeX v-if="isMuted || volume === 0" :size="18" />
+                    <Volume2 v-else :size="18" />
+                  </button>
+                  <input 
+                    type="range" min="0" max="1" step="0.1" 
+                    :value="volume" 
+                    @input="updateVolume(Number(($event.target as HTMLInputElement).value))"
+                    class="volume-slider"
+                  >
+                </div>
               </div>
+
               <div class="time-readout">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</div>
+              
               <div class="draw-tools">
+                <button @click="toggleFullscreen" class="transport-btn" title="Pantalla Completa">
+                  <Maximize :size="18" />
+                </button>
                 <button @click="isDrawing = !isDrawing" :class="{ active: isDrawing }" class="marker-btn">
                   <Pencil :size="18" />
                   {{ isDrawing ? 'CAPA DIBUJO ON' : 'DIBUJAR' }}
@@ -680,7 +782,7 @@ const downloadAllClips = async () => {
                <input v-model="newTagColor" type="color" class="studio-color-picker">
              </div>
              <button 
-                @click="analystStore.addTag(newTagName, newTagColor, newTagCategory, newTagBefore, newTagAfter); newTagName = ''; isConfiguringTags = false" 
+                @click="analystStore.addTag({ label: newTagName, color: newTagColor, category: newTagCategory, durationBefore: newTagBefore, durationAfter: newTagAfter }); newTagName = ''; isConfiguringTags = false" 
                 class="btn-primary full-width"
               >
                Crear Botón
@@ -817,6 +919,38 @@ const downloadAllClips = async () => {
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: color 0.2s;
+}
+
+.transport-btn:hover {
+  color: white;
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255,255,255,0.1);
+}
+
+.volume-slider {
+  width: 60px;
+  accent-color: var(--primary);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  cursor: pointer;
+}
+
+.volume-control:hover .volume-slider {
+  opacity: 1;
+}
+
+.draw-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 /* Integrated Console Logic */

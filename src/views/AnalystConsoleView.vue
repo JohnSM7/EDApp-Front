@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useAnalystStore } from '../store/analyst'
 import { Layout } from 'lucide-vue-next'
 
@@ -21,6 +21,27 @@ const sendClipEvent = (tag: any) => {
     tag: JSON.parse(JSON.stringify(tag)) 
   })
 }
+
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (['ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
+    event.preventDefault()
+    if (event.key === 'ArrowLeft') {
+      consoleChannel.postMessage({ type: 'SKIP_VIDEO', amount: -5 })
+    } else if (event.key === 'ArrowRight') {
+      consoleChannel.postMessage({ type: 'SKIP_VIDEO', amount: 5 })
+    } else if (event.key === ' ') {
+      consoleChannel.postMessage({ type: 'TOGGLE_PLAY' })
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 </script>
 
 <template>
