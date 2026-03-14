@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { 
   Pencil, MoveUpRight, Circle, Square, 
   Minus, Trash2, MousePointer2
 } from 'lucide-vue-next'
-import { useAnalystStore, type Drawing } from '../store/analyst'
+import { useAnalystStore } from '../store/analyst'
 
 const props = defineProps<{
   active: boolean
@@ -109,9 +109,6 @@ const drawTemp = () => {
   if (!tempCtx.value || currentPoints.value.length < 2) return
   const tCtx = tempCtx.value
   tCtx.clearRect(0, 0, tempCanvasRef.value!.width, tempCanvasRef.value!.height)
-  
-  const p1 = currentPoints.value[0]!
-  const p2 = currentPoints.value[currentPoints.value.length - 1]!
   
   renderObject(tCtx, {
     tool: currentTool.value,
