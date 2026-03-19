@@ -6,121 +6,56 @@ const auth = useAuthStore()
 </script>
 
 <template>
-  <div class="dashboard">
-    <header class="page-header">
-      <h1>Bienvenido, {{ auth.user?.name }}</h1>
-      <p>Resumen de actividad de tu equipo para esta temporada.</p>
+  <div class="dashboard grid grid-cols-1 gap-8 my-8 text-on-background">
+    <header class="flex flex-col gap-2 p-6 bg-surface-container rounded-xl border border-white/5 shadow-xl">
+      <h1 class="text-3xl font-black font-headline tracking-tighter uppercase text-primary">Bienvenido, {{ auth.user?.name || 'Analista' }}</h1>
+      <p class="text-xs font-label text-on-surface-variant tracking-widest uppercase">Resumen de actividad de tu equipo para esta temporada.</p>
     </header>
 
-    <div class="stats-grid">
-      <div class="glass-card stat-card">
-        <div class="stat-icon blue">
-          <Trophy :size="24" />
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-surface-container-low p-6 rounded-xl border border-white/5 shadow-2xl flex items-center gap-6 hover:border-primary/30 transition-colors">
+        <div class="w-16 h-16 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+          <Trophy :size="32" />
         </div>
-        <div class="stat-info">
-          <h3>Partidos Jugados</h3>
-          <p class="stat-value">12</p>
-        </div>
-      </div>
-
-      <div class="glass-card stat-card">
-        <div class="stat-icon green">
-          <Users :size="24" />
-        </div>
-        <div class="stat-info">
-          <h3>Plantilla</h3>
-          <p class="stat-value">22</p>
+        <div>
+          <h3 class="text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">Partidos Jugados</h3>
+          <p class="text-4xl font-black text-white mt-1">12</p>
         </div>
       </div>
 
-      <div class="glass-card stat-card">
-        <div class="stat-icon amber">
-          <BarChart :size="24" />
+      <div class="bg-surface-container-low p-6 rounded-xl border border-white/5 shadow-2xl flex items-center gap-6 hover:border-primary/30 transition-colors">
+        <div class="w-16 h-16 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+          <Users :size="32" />
         </div>
-        <div class="stat-info">
-          <h3>Análisis Completados</h3>
-          <p class="stat-value">45</p>
+        <div>
+          <h3 class="text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">Plantilla</h3>
+          <p class="text-4xl font-black text-white mt-1">22</p>
+        </div>
+      </div>
+
+      <div class="bg-surface-container-low p-6 rounded-xl border border-white/5 shadow-2xl flex items-center gap-6 hover:border-primary/30 transition-colors">
+        <div class="w-16 h-16 rounded-xl bg-tertiary/10 text-tertiary flex items-center justify-center">
+          <BarChart :size="32" />
+        </div>
+        <div>
+          <h3 class="text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">Análisis Completados</h3>
+          <p class="text-4xl font-black text-white mt-1">45</p>
         </div>
       </div>
     </div>
 
-    <section class="recent-clips glass-card">
-      <h2>Últimos Recortes</h2>
-      <div class="empty-state">
-        <p>No hay recortes recientes. Empieza a analizar un partido en el Modo Analista.</p>
+    <section class="bg-surface-container p-8 rounded-xl border border-white/5 mt-4">
+      <h2 class="font-headline text-lg font-bold uppercase mb-6 text-on-background flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary">history</span> Últimos Recortes
+      </h2>
+      <div class="flex flex-col items-center justify-center h-48 bg-surface-container-highest rounded-xl border border-white/5 border-dashed">
+        <span class="material-symbols-outlined text-4xl text-outline mb-2">videocam_off</span>
+        <p class="text-xs font-headline font-bold uppercase tracking-widest text-outline">No hay recortes recientes. Empieza a analizar un partido en el Modo Analista.</p>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.page-header {
-  margin-bottom: 32px;
-}
-
-h1 {
-  font-size: 32px;
-  margin-bottom: 8px;
-}
-
-p {
-  color: var(--text-muted);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 24px;
-  margin-bottom: 40px;
-}
-
-.stat-card {
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.stat-icon.blue { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-.stat-icon.green { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-.stat-icon.amber { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-
-.stat-info h3 {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.recent-clips {
-  padding: 32px;
-  min-height: 200px;
-}
-
-h2 {
-  font-size: 20px;
-  margin-bottom: 20px;
-}
-
-.empty-state {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 120px;
-  color: var(--text-muted);
-  font-style: italic;
-}
+/* Scoped styles removed in favor of Tailwind CSS */
 </style>

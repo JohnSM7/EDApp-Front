@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { FileUp, Search, Download, User, Activity, Target, X, Calendar, TrendingUp, PlayCircle, Plus, Video } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
 interface Player {
@@ -131,14 +130,7 @@ const handleFileUpload = (event: Event) => {
   reader.readAsArrayBuffer(file)
 }
 
-const getPositionColor = (pos: string) => {
-  const p = pos.toLowerCase()
-  if (p.includes('del')) return '#f87171'
-  if (p.includes('cen') || p.includes('med')) return '#fbbf24'
-  if (p.includes('def')) return '#60a5fa'
-  if (p.includes('por')) return '#34d399'
-  return '#94a3b8'
-}
+
 
 const openPlayerProfile = (player: Player) => {
   selectedPlayer.value = player
@@ -229,1372 +221,146 @@ const handleEditPhotoUpload = (event: Event) => {
   reader.readAsDataURL(file)
 }
 
-const handleHeatmapUpload = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const result = e.target?.result as string
-    newPlayer.value.heatmap = result
-  }
-  reader.readAsDataURL(file)
-}
 
-const handleEditHeatmapUpload = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file || !editForm.value) return
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const result = e.target?.result as string
-    editForm.value!.heatmap = result
-  }
-  reader.readAsDataURL(file)
-}
-
-const videoTemp = ref({ title: '', url: '' })
-
-const addVideoToNew = () => {
-  if (videoTemp.value.title && videoTemp.value.url) {
-    if (!newPlayer.value.videos) newPlayer.value.videos = []
-    newPlayer.value.videos.push({ ...videoTemp.value })
-    videoTemp.value = { title: '', url: '' }
-  }
-}
-
-const addVideoToEdit = () => {
-  if (videoTemp.value.title && videoTemp.value.url && editForm.value) {
-    if (!editForm.value.videos) editForm.value.videos = []
-    editForm.value.videos.push({ ...videoTemp.value })
-    videoTemp.value = { title: '', url: '' }
-  }
-}
 </script>
 
 <template>
-  <div class="team-view">
-    <header class="page-header">
-      <div class="header-main">
-        <h1>Mi Equipo</h1>
-        <div class="actions">
-          <button @click="isAddingPlayer = true" class="studio-btn-secondary">
-            <User :size="18" />
-            Nuevo Jugador
-          </button>
-          <button @click="downloadTemplate" class="studio-btn-secondary">
-            <Download :size="18" />
-            Descargar Plantilla
-          </button>
-          <label class="studio-btn-primary">
-            <FileUp :size="18" />
-            Cargar Excel
+  <div class="team-view grid grid-cols-12 gap-8 my-8 text-on-background">
+    <div class="col-span-12 lg:col-span-9 space-y-8">
+      <div class="flex justify-between items-center bg-surface-container p-6 rounded-xl border border-white/5 shadow-xl">
+        <div>
+          <h1 class="text-3xl font-black font-headline tracking-tighter uppercase text-primary">Plantilla del Primer Equipo</h1>
+          <p class="text-xs font-label text-on-surface-variant mt-2 tracking-widest uppercase">Gestión de Unidad Élite</p>
+        </div>
+        <div class="flex gap-4">
+          <input v-model="searchQuery" class="bg-surface-container-highest border-white/10 rounded-lg py-2 px-4 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface" placeholder="BUSCAR JUGADOR..."/>
+          <label class="cursor-pointer bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-on-primary-container px-4 py-2 rounded-lg font-bold text-xs font-headline uppercase transition-colors tracking-widest">
             <input type="file" @change="handleFileUpload" accept=".xlsx,.xls" hidden />
+            Cargar Excel
           </label>
         </div>
       </div>
-      <p>Gestiona la plantilla cargando tus datos desde Excel. Visualiza perfiles y estadísticas detalladas.</p>
-    </header>
-
-
-    <div v-if="loading" class="loading-state">
-      <div class="studio-spinner"></div>
-      <p>Generando fichas de jugadores...</p>
-    </div>
-
-    <div v-if="!loading" class="team-container">
-      <div class="team-toolbar">
-        <div class="search-box-studio">
-          <Search :size="18" />
-          <input v-model="searchQuery" type="text" placeholder="Buscar por nombre o posición..." />
+      <div v-if="loading" class="py-20 text-center"><p class="text-primary font-headline animate-pulse">Cargando...</p></div>
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div @click="isAddingPlayer = true" class="aspect-[3/4] border-2 border-dashed border-white/10 hover:border-primary/50 rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white/5 hover:bg-white/10 transition-all">
+          <span class="material-symbols-outlined text-4xl text-outline mb-4">add</span>
+          <span class="font-headline font-bold text-sm tracking-widest uppercase text-outline">Añadir Jugador</span>
         </div>
-        <div class="stats-summary">
-          <span>{{ players.length }} Jugadores</span>
-        </div>
-      </div>
-
-      <div class="players-grid">
-        <!-- Add Player Card -->
-        <div class="add-player-card glass-card gold-border" @click="isAddingPlayer = true">
-          <div class="add-icon">
-            <Activity :size="32" />
-          </div>
-          <h3>Agregar Jugador</h3>
-          <p>Individual</p>
-        </div>
-
-        <div v-for="player in filteredPlayers" :key="player.id" class="player-cromo glass-card">
-          <div class="cromo-bg" :style="{ background: `linear-gradient(135deg, ${getPositionColor(player.posicion)}22 0%, rgba(0,0,0,0) 100%)` }"></div>
-          
-          <div class="player-photo">
-            <div class="dorsal-tag">{{ player.dorsal }}</div>
-            <img :src="player.foto" :alt="player.nombre" class="no-bg-photo" />
-          </div>
-
-          <div class="player-info">
-            <span class="pos-badge" :style="{ backgroundColor: getPositionColor(player.posicion) }">
-              {{ player.posicion }}
-            </span>
-            <h3 class="player-name">{{ player.nombre }}</h3>
-            <div class="player-age">{{ player.edad }} años</div>
-            
-            <div class="stats-cromos">
-              <div class="stat-item">
-                <Target :size="14" />
-                <span class="val">{{ player.altura }}</span>
-                <span class="lab">cm</span>
-              </div>
-              <div class="stat-item">
-                <Activity :size="14" />
-                <span class="val">{{ player.peso }}</span>
-                <span class="lab">kg</span>
-              </div>
-              <div class="stat-item">
-                <TrendingUp :size="14" />
-                <span class="val">{{ player.pieDominante === 'Derecho' ? 'R' : player.pieDominante === 'Izquierdo' ? 'L' : 'B' }}</span>
-                <span class="lab">Pie</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="cromo-footer">
-            <button class="view-btn" @click="openPlayerProfile(player)">Ver Perfil</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Player Modal -->
-    <div v-if="isAddingPlayer" class="modal-overlay" @click.self="isAddingPlayer = false">
-      <div class="modal glass-card player-form-modal">
-        <div class="modal-header">
-          <h2>Nuevo Jugador</h2>
-          <button @click="isAddingPlayer = false" class="icon-btn-circle"><X :size="20" /></button>
-        </div>
-        <div class="modal-body">
-          <div class="photo-upload-section">
-            <div class="photo-preview-large glass-card">
-              <img v-if="photoPreview" :src="photoPreview" class="preview-img" />
-              <User v-else :size="48" class="placeholder-icon" />
-            </div>
-            <label class="studio-btn-secondary mini">
-              <FileUp :size="14" />
-              {{ photoPreview ? 'Cambiar Foto' : 'Subir Foto' }}
-              <input type="file" @change="handlePhotoUpload" accept="image/*" hidden />
-            </label>
-          </div>
-
-          <div class="form-grid">
-            <div class="input-group">
-              <label>Nombre Completo</label>
-              <input v-model="newPlayer.nombre" type="text" placeholder="Ej: Pedri" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Edad</label>
-              <input v-model.number="newPlayer.edad" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Lugar de Nacimiento</label>
-              <input v-model="newPlayer.lugarNacimiento" type="text" placeholder="Ciudad, País" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Posición</label>
-              <select v-model="newPlayer.posicion" class="studio-input">
-                <option>Portero</option>
-                <option>Defensa</option>
-                <option>Centrocampista</option>
-                <option>Delantero</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Pie Dominante</label>
-              <select v-model="newPlayer.pieDominante" class="studio-input">
-                <option>Derecho</option>
-                <option>Izquierdo</option>
-                <option>Ambidiestro</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Lateralidad</label>
-              <select v-model="newPlayer.lateralidad" class="studio-input">
-                <option>Derecha</option>
-                <option>Izquierda</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Altura (cm)</label>
-              <input v-model.number="newPlayer.altura" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Peso (kg)</label>
-              <input v-model.number="newPlayer.peso" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Dorsal</label>
-              <input v-model.number="newPlayer.dorsal" type="number" class="studio-input">
-            </div>
-          </div>
-
-          <div class="analysis-form-section">
-            <h4><Target :size="16" /> Análisis Táctico (Mapa de Calor)</h4>
-            <div class="heatmap-upload-area">
-              <div v-if="newPlayer.heatmap" class="heatmap-preview-mini">
-                <img :src="newPlayer.heatmap" />
-              </div>
-              <label class="studio-btn-secondary mini">
-                <FileUp :size="14" />
-                {{ newPlayer.heatmap ? 'Cambiar Mapa' : 'Subir Mapa de Calor' }}
-                <input type="file" @change="handleHeatmapUpload" accept="image/*" hidden />
-              </label>
-            </div>
-          </div>
-
-          <div class="analysis-form-section">
-            <h4><Video :size="16" /> Vídeos de Referencia</h4>
-            <div class="video-add-form">
-              <input v-model="videoTemp.title" type="text" placeholder="Título (Ej: Scouting vs Madrid)" class="studio-input">
-              <input v-model="videoTemp.url" type="text" placeholder="URL del vídeo" class="studio-input">
-              <button @click="addVideoToNew" class="icon-btn-circle plus-btn"><Plus :size="16" /></button>
-            </div>
-            <div class="video-list-mini" v-if="newPlayer.videos && newPlayer.videos.length > 0">
-              <div v-for="(v, i) in newPlayer.videos" :key="i" class="v-mini-item">
-                <Video :size="12" />
-                <span>{{ v.title }}</span>
-                <button @click="newPlayer.videos.splice(i, 1)" class="remove-v">×</button>
-              </div>
-            </div>
-          </div>
-
-          <button @click="addPlayer" class="studio-btn-primary full-width margin-top">
-            Añadir a la Plantilla
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Player Profile Modal -->
-    <div v-if="selectedPlayer" class="modal-overlay" @click.self="closePlayerProfile">
-      <div class="modal glass-card profile-modal">
-        <button class="close-modal-btn" @click="closePlayerProfile">
-          <X :size="24" />
-        </button>
-        
-        <div class="modal-header-profile" :style="{ background: `linear-gradient(135deg, ${getPositionColor(selectedPlayer.posicion)}44 0%, rgba(0,0,0,0) 100%)` }">
-          <div class="profile-photo-container">
-             <img :src="selectedPlayer.foto" :alt="selectedPlayer.nombre" class="profile-photo" />
-             <div class="profile-dorsal" :style="{ color: getPositionColor(selectedPlayer.posicion) }">{{ selectedPlayer.dorsal }}</div>
-          </div>
-          <div class="profile-title">
-            <h2>{{ selectedPlayer.nombre }}</h2>
-            <span class="pos-badge-large" :style="{ backgroundColor: getPositionColor(selectedPlayer.posicion) }">
-              {{ selectedPlayer.posicion }}
-            </span>
-          </div>
-        </div>
-        
-        <div class="modal-body-profile extended-layout">
-          <!-- Left Column: Biography -->
-          <div class="profile-left-col">
-            <div class="profile-stats-grid biographical">
-              <div class="bio-item">
-                <Calendar class="bio-icon" :size="20" />
-                <div class="bio-content">
-                  <span class="bio-label">Edad</span>
-                  <span class="bio-val">{{ selectedPlayer.edad }} años</span>
-                </div>
-              </div>
-              <div class="bio-item">
-                <Search class="bio-icon" :size="20" />
-                <div class="bio-content">
-                  <span class="bio-label">Nacimiento</span>
-                  <span class="bio-val">{{ selectedPlayer.lugarNacimiento }}</span>
-                </div>
-              </div>
-              <div class="bio-item">
-                <Target class="bio-icon" :size="20" />
-                <div class="bio-content">
-                  <span class="bio-label">Pie Dominante</span>
-                  <span class="bio-val">{{ selectedPlayer.pieDominante }}</span>
-                </div>
-              </div>
-              <div class="bio-item">
-                <Activity class="bio-icon" :size="20" />
-                <div class="bio-content">
-                  <span class="bio-label">Lateralidad</span>
-                  <span class="bio-val">{{ selectedPlayer.lateralidad }}</span>
-                </div>
-              </div>
-              <div class="bio-item">
-                <TrendingUp class="bio-icon" :size="20" />
-                <div class="bio-content">
-                  <span class="bio-label">Altura / Peso</span>
-                  <span class="bio-val">{{ selectedPlayer.altura }} cm / {{ selectedPlayer.peso }} kg</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="profile-actions-footer">
-              <button @click="startEditing" class="studio-btn-secondary full-width">
-                <Activity :size="18" />
-                Editar Jugador
-              </button>
-              <button @click="deletePlayer(selectedPlayer.id)" class="delete-btn-text">
-                Eliminar Jugador
-              </button>
-            </div>
-          </div>
-
-          <!-- Right Column: Analysis -->
-          <div class="profile-right-col">
-            <div class="analysis-section heatmap-container glass-card">
-              <div class="section-header">
-                <h3><Target :size="20" /> Mapa de Calor (Zona de Influencia)</h3>
-              </div>
-              <div class="heatmap-canvas">
-                <img v-if="selectedPlayer.heatmap" :src="selectedPlayer.heatmap" class="heatmap-img" />
-                <div v-else class="heatmap-placeholder">
-                  <div class="field-lines"></div>
-                  <div class="heat-blob"></div>
-                  <span class="placeholder-text">Sube un mapa de calor en la edición</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="analysis-section videos-container glass-card">
-              <div class="section-header">
-                <h3><Video :size="20" /> Videos de Referencia / Scouting</h3>
-              </div>
-              <div class="videos-grid">
-                <div v-if="selectedPlayer.videos && selectedPlayer.videos.length > 0" class="video-list">
-                  <div v-for="(vid, idx) in selectedPlayer.videos" :key="idx" class="video-reference-item glass-card">
-                    <div class="video-thumb">
-                      <PlayCircle :size="32" />
-                    </div>
-                    <div class="video-info">
-                      <span class="video-title">{{ vid.title }}</span>
-                      <a :href="vid.url" target="_blank" class="video-link">Ver Análisis</a>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="empty-videos">
-                  <Video :size="48" />
-                  <p>Aún no hay videos vinculados a este perfil</p>
-                </div>
-              </div>
+        <div v-for="player in filteredPlayers" :key="player.id" @click="openPlayerProfile(player)" class="group cursor-pointer aspect-[3/4] relative bg-surface-container-low rounded-xl overflow-hidden shadow-2xl border border-white/5 hover:border-primary/50 transition-all">
+          <img :src="player.foto" class="w-full h-[60%] object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"/>
+          <div class="absolute inset-0 bg-gradient-to-t from-surface-container-low via-surface-container-low/80 to-transparent"></div>
+          <span class="absolute top-4 right-4 text-5xl font-black italic text-white/5 group-hover:text-primary/10">{{ player.dorsal }}</span>
+          <div class="absolute bottom-6 left-6 right-6">
+            <span class="text-[10px] font-bold tracking-widest uppercase px-2 py-1 rounded bg-primary/10 text-primary">{{ player.posicion }}</span>
+            <h3 class="text-xl font-bold font-headline uppercase text-white mt-2 mb-4">{{ player.nombre }}</h3>
+            <div class="grid grid-cols-3 gap-2 border-t border-white/10 pt-4 text-center">
+              <div><span class="block text-sm font-bold">{{ player.edad }}</span><span class="text-[9px] text-outline uppercase font-label">Años</span></div>
+              <div><span class="block text-sm font-bold">{{ player.altura }}</span><span class="text-[9px] text-outline uppercase font-label">CM</span></div>
+              <div><span class="block text-sm font-bold">{{ player.peso }}</span><span class="text-[9px] text-outline uppercase font-label">KG</span></div>
             </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Edit Player Modal -->
-    <div v-if="isEditingProfile && editForm" class="modal-overlay" @click.self="isEditingProfile = false">
-      <div class="modal glass-card player-form-modal">
-        <div class="modal-header">
-          <h2>Editar Jugador: {{ editForm.nombre }}</h2>
-          <button @click="isEditingProfile = false" class="icon-btn-circle"><X :size="20" /></button>
+    <div class="col-span-12 lg:col-span-3">
+      <div class="bg-surface-container-low rounded-xl p-6 border border-white/5 shadow-xl sticky top-24">
+        <h2 class="font-headline text-lg font-bold uppercase mb-6 text-on-background">Resumen Plantilla</h2>
+        <div class="text-center bg-surface-container p-8 rounded-xl border border-white/5">
+          <span class="text-5xl font-black text-on-background">{{ players.length }}</span>
+          <p class="text-[10px] uppercase font-label text-outline tracking-widest mt-2">Jugadores</p>
         </div>
-        <div class="modal-body">
-          <div class="photo-upload-section">
-            <div class="photo-preview-large glass-card">
-              <img v-if="photoPreview" :src="photoPreview" class="preview-img" />
-              <User v-else :size="48" class="placeholder-icon" />
-            </div>
-            <label class="studio-btn-secondary mini">
-              <FileUp :size="14" />
-              Cambiar Foto
-              <input type="file" @change="handleEditPhotoUpload" accept="image/*" hidden />
-            </label>
-          </div>
+        <button @click="downloadTemplate" class="w-full mt-6 py-3 bg-surface-container border border-white/10 text-outline hover:text-primary font-headline text-[10px] font-bold uppercase tracking-widest rounded-lg transition-colors">Descargar Plantilla Base</button>
+      </div>
+    </div>
+  </div>
 
-          <div class="form-grid">
-            <div class="input-group">
-              <label>Nombre Completo</label>
-              <input v-model="editForm.nombre" type="text" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Edad</label>
-              <input v-model.number="editForm.edad" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Lugar de Nacimiento</label>
-              <input v-model="editForm.lugarNacimiento" type="text" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Posición</label>
-              <select v-model="editForm.posicion" class="studio-input">
-                <option>Portero</option>
-                <option>Defensa</option>
-                <option>Centrocampista</option>
-                <option>Delantero</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Pie Dominante</label>
-              <select v-model="editForm.pieDominante" class="studio-input">
-                <option>Derecho</option>
-                <option>Izquierdo</option>
-                <option>Ambidiestro</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Lateralidad</label>
-              <select v-model="editForm.lateralidad" class="studio-input">
-                <option>Derecha</option>
-                <option>Izquierda</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Altura (cm)</label>
-              <input v-model.number="editForm.altura" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Peso (kg)</label>
-              <input v-model.number="editForm.peso" type="number" class="studio-input">
-            </div>
-            <div class="input-group">
-              <label>Dorsal</label>
-              <input v-model.number="editForm.dorsal" type="number" class="studio-input">
-            </div>
+  <div v-if="selectedPlayer" class="fixed inset-0 bg-background/95 backdrop-blur-md z-[100] flex p-4 lg:p-12 items-center justify-center">
+    <div class="bg-surface border border-white/10 rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
+      <button @click="closePlayerProfile" class="absolute top-6 right-6 text-outline hover:text-error transition-colors z-[101]"><span class="material-symbols-outlined text-3xl">close</span></button>
+      <div class="h-64 relative bg-surface-container-highest flex-shrink-0">
+        <img :src="selectedPlayer.foto" class="absolute inset-0 w-full h-full object-cover opacity-50"/>
+        <div class="absolute inset-0 bg-gradient-to-t from-surface via-surface/80 to-transparent"></div>
+        <div class="absolute bottom-6 left-8 flex gap-6 items-end">
+          <img :src="selectedPlayer.foto" class="w-32 h-32 rounded-xl border border-white/10 object-cover shadow-xl"/>
+          <div class="pb-2">
+            <span class="text-xs font-bold tracking-widest uppercase px-2 py-1 bg-primary/20 text-primary rounded">{{ selectedPlayer.posicion }}</span>
+            <h2 class="text-4xl font-black font-headline uppercase text-white mt-2">{{ selectedPlayer.nombre }}</h2>
           </div>
-
-          <div class="analysis-form-section">
-            <h4><Target :size="16" /> Análisis Táctico (Mapa de Calor)</h4>
-            <div class="heatmap-upload-area">
-              <div v-if="editForm.heatmap" class="heatmap-preview-mini">
-                <img :src="editForm.heatmap" />
-              </div>
-              <label class="studio-btn-secondary mini">
-                <FileUp :size="14" />
-                {{ editForm.heatmap ? 'Cambiar Mapa' : 'Subir Mapa de Calor' }}
-                <input type="file" @change="handleEditHeatmapUpload" accept="image/*" hidden />
-              </label>
-            </div>
-          </div>
-
-          <div class="analysis-form-section">
-            <h4><Video :size="16" /> Vídeos de Referencia</h4>
-            <div class="video-add-form">
-              <input v-model="videoTemp.title" type="text" placeholder="Título del vídeo" class="studio-input">
-              <input v-model="videoTemp.url" type="text" placeholder="URL del vídeo" class="studio-input">
-              <button @click="addVideoToEdit" class="icon-btn-circle plus-btn"><Plus :size="16" /></button>
-            </div>
-            <div class="video-list-mini" v-if="editForm.videos && editForm.videos.length > 0">
-              <div v-for="(v, i) in editForm.videos" :key="i" class="v-mini-item">
-                <Video :size="12" />
-                <span>{{ v.title }}</span>
-                <button @click="editForm.videos.splice(i, 1)" class="remove-v">×</button>
-              </div>
-            </div>
-          </div>
-
-          <button @click="updatePlayer" class="studio-btn-primary full-width margin-top">
-            Guardar Cambios
-          </button>
         </div>
+      </div>
+      <div class="flex-grow flex flex-col lg:flex-row gap-8 p-8 overflow-y-auto">
+        <div class="w-full lg:w-1/3 flex flex-col gap-6">
+          <div class="bg-surface-container p-6 rounded-xl border border-white/5">
+            <h3 class="font-headline text-sm font-bold uppercase text-outline mb-4">Perfil</h3>
+            <ul class="space-y-3 text-sm">
+              <li class="flex justify-between border-b border-white/5 pb-2"><span class="text-outline uppercase text-xs font-bold font-label">Edad</span> <span class="text-white">{{ selectedPlayer.edad }}</span></li>
+              <li class="flex justify-between border-b border-white/5 pb-2"><span class="text-outline uppercase text-xs font-bold font-label">Altura / Peso</span> <span class="text-white">{{ selectedPlayer.altura }}cm / {{ selectedPlayer.peso }}kg</span></li>
+              <li class="flex justify-between border-b border-white/5 pb-2"><span class="text-outline uppercase text-xs font-bold font-label">Pie</span> <span class="text-white">{{ selectedPlayer.pieDominante }}</span></li>
+              <li class="flex justify-between border-b border-white/5 pb-2"><span class="text-outline uppercase text-xs font-bold font-label">Origen</span> <span class="text-white">{{ selectedPlayer.lugarNacimiento }}</span></li>
+            </ul>
+          </div>
+          <button @click="startEditing" class="py-3 bg-surface-container-highest border border-white/10 hover:border-primary/50 text-white font-headline text-xs font-bold uppercase tracking-widest rounded transition-all">Editar Perfil</button>
+          <button @click="deletePlayer(selectedPlayer.id)" class="py-3 bg-error/10 border border-error/20 text-error hover:bg-error hover:text-white font-headline text-xs font-bold uppercase tracking-widest rounded transition-all">Eliminar Jugador</button>
+        </div>
+        <div class="w-full lg:w-2/3 flex flex-col gap-6">
+           <div class="bg-surface-container rounded-xl p-6 border border-white/5 h-64 flex flex-col">
+             <h3 class="font-headline text-sm font-bold uppercase text-outline mb-4 flex items-center gap-2">Mapa Calor</h3>
+             <div class="flex-grow bg-[#0f172a] rounded relative flex items-center justify-center border border-white/5 overflow-hidden">
+               <img v-if="selectedPlayer.heatmap" :src="selectedPlayer.heatmap" class="absolute w-full h-full object-cover opacity-80"/>
+               <span v-else class="text-outline text-xs uppercase font-headline tracking-widest">Sin mapa de calor</span>
+             </div>
+           </div>
+           <div class="bg-surface-container rounded-xl p-6 border border-white/5 flex-grow">
+             <h3 class="font-headline text-sm font-bold uppercase text-outline mb-4">Audovisual</h3>
+             <div class="grid grid-cols-2 gap-4">
+                <div v-for="v in selectedPlayer.videos" :key="v.url" class="p-4 bg-surface-container-highest rounded border border-white/5 flex gap-4">
+                  <span class="material-symbols-outlined text-secondary">play_circle</span>
+                  <div><p class="text-sm font-bold">{{ v.title }}</p><a :href="v.url" class="text-[10px] text-secondary hover:underline uppercase font-headline">Ver Video</a></div>
+                </div>
+             </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div v-if="isAddingPlayer || isEditingProfile" class="fixed inset-0 bg-background/95 backdrop-blur-md z-[100] flex p-4 items-center justify-center overflow-y-auto">
+    <div class="bg-surface border border-white/10 rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden my-auto h-auto max-h-[90vh]">
+      <div class="p-6 border-b border-white/5 flex justify-between items-center sticky top-0 bg-surface z-10">
+        <h2 class="font-headline text-xl font-bold tracking-tight text-white uppercase">{{ isAddingPlayer ? 'Nuevo Jugador' : 'Editar Jugador' }}</h2>
+        <button @click="isAddingPlayer ? isAddingPlayer = false : isEditingProfile = false" class="text-outline hover:text-error"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="p-6 space-y-6 overflow-y-auto">
+        <div class="flex flex-col items-center gap-4">
+          <img v-if="photoPreview" :src="photoPreview" class="w-24 h-24 rounded-full border border-white/10 object-cover"/>
+          <span v-else class="w-24 h-24 rounded-full bg-surface-container-highest border border-white/10 material-symbols-outlined flex items-center justify-center text-4xl text-outline">person</span>
+          <label class="cursor-pointer text-xs font-bold font-headline uppercase tracking-widest bg-surface-container px-4 py-2 rounded text-outline hover:text-primary border border-white/10">
+            <input type="file" @change="isAddingPlayer ? handlePhotoUpload($event) : handleEditPhotoUpload($event)" accept="image/*" hidden />
+            Seleccionar Foto
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4 text-sm font-body">
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Nombre</label><input v-model="(isAddingPlayer ? newPlayer : editForm!).nombre" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Posición</label>
+            <select v-model="(isAddingPlayer ? newPlayer : editForm!).posicion" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white">
+              <option>Portero</option><option>Defensa</option><option>Centrocampista</option><option>Delantero</option>
+            </select>
+          </div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Dorsal</label><input v-model.number="(isAddingPlayer ? newPlayer : editForm!).dorsal" type="number" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Edad</label><input v-model.number="(isAddingPlayer ? newPlayer : editForm!).edad" type="number" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Altura (cm)</label><input v-model.number="(isAddingPlayer ? newPlayer : editForm!).altura" type="number" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Peso (kg)</label><input v-model.number="(isAddingPlayer ? newPlayer : editForm!).peso" type="number" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Pie Dominante</label>
+            <select v-model="(isAddingPlayer ? newPlayer : editForm!).pieDominante" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"><option>Derecho</option><option>Izquierdo</option><option>Ambidiestro</option></select>
+          </div>
+          <div class="space-y-1"><label class="text-[10px] text-outline uppercase font-headline">Origen</label><input v-model="(isAddingPlayer ? newPlayer : editForm!).lugarNacimiento" class="w-full bg-surface-container border border-white/10 p-2 rounded text-white"/></div>
+        </div>
+        <button @click="isAddingPlayer ? addPlayer() : updatePlayer()" class="w-full mt-4 py-4 bg-primary text-on-primary-container hover:bg-primary-container font-headline font-bold uppercase tracking-widest text-xs rounded transition-colors shadow-lg">Guardar</button>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
-.page-header {
-  margin-bottom: 32px;
-}
 
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-}
-
-.studio-btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  border: none;
-  padding: 10px 18px;
-  border-radius: 8px;
-  color: white;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.studio-btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 10px 18px;
-  border-radius: 8px;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.empty-state {
-  margin-top: 40px;
-  padding: 80px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.empty-icon-studio {
-  background: rgba(59, 130, 246, 0.1);
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #3b82f6;
-  margin-bottom: 8px;
-}
-
-.text-btn {
-  background: transparent;
-  border: none;
-  color: #3b82f6;
-  cursor: pointer;
-  font-size: 14px;
-  text-decoration: underline;
-}
-
-.team-container {
-  margin-top: 24px;
-}
-
-.team-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.search-box-studio {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 10px 16px;
-  border-radius: 12px;
-  width: 350px;
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.search-box-studio input {
-  background: transparent;
-  border: none;
-  color: white;
-  width: 100%;
-}
-
-.players-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 24px;
-}
-
-.player-cromo {
-  position: relative;
-  overflow: hidden;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.player-cromo:hover {
-  transform: translateY(-10px);
-  border-color: #3b82f6;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-.cromo-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 120px;
-  pointer-events: none;
-}
-
-.player-photo {
-  position: relative;
-  height: 200px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  margin-top: 10px;
-}
-
-.no-bg-photo {
-  height: 100%;
-  z-index: 1;
-}
-
-.dorsal-tag {
-  position: absolute;
-  top: 10px;
-  left: 20px;
-  font-size: 48px;
-  font-weight: 900;
-  color: rgba(255,255,255,0.1);
-  font-style: italic;
-}
-
-.player-info {
-  padding: 20px;
-  text-align: center;
-  flex-grow: 1;
-}
-
-.pos-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: white;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-
-.player-name {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-
-.player-age {
-  font-size: 13px;
-  color: #94a3b8;
-  margin-bottom: 20px;
-}
-
-.stats-cromos {
-  display: flex;
-  justify-content: space-around;
-  background: rgba(0,0,0,0.2);
-  padding: 12px 8px;
-  border-radius: 12px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.stat-item .val {
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.stat-item .lab {
-  font-size: 10px;
-  color: #94a3b8;
-  text-transform: uppercase;
-}
-
-.cromo-footer {
-  padding: 16px;
-  background: rgba(255,255,255,0.02);
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-
-.view-btn {
-  width: 100%;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.view-btn:hover {
-  background: #3b82f6;
-  color: white;
-}
-
-.studio-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 16px;
-}
-
-/* Add Player Card */
-.add-player-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px;
-  text-align: center;
-  cursor: pointer;
-  border-style: dashed;
-  background: rgba(59, 130, 246, 0.03);
-  transition: all 0.3s;
-  min-height: 280px;
-}
-
-.add-player-card:hover {
-  background: rgba(59, 130, 246, 0.08);
-  transform: translateY(-5px);
-  border-color: #3b82f6;
-}
-
-.add-icon {
-  width: 64px;
-  height: 64px;
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #3b82f6;
-  margin-bottom: 20px;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.add-player-card h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
-}
-
-.add-player-card p {
-  color: #94a3b8;
-  font-size: 14px;
-  margin: 0;
-}
-
-/* Manual Form Modal */
-.player-form-modal {
-  width: 100%;
-  max-width: 500px;
-  background: #1e293b;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.modal-header {
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.modal-header h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.modal-body {
-  padding: 24px;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.input-group label {
-  font-size: 12px;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.studio-input {
-  background: rgba(0,0,0,0.2);
-  border: 1px solid rgba(255,255,255,0.1);
-  padding: 10px 14px;
-  border-radius: 8px;
-  color: white;
-  font-size: 14px;
-}
-
-.studio-input:focus {
-  border-color: #3b82f6;
-  outline: none;
-}
-
-.stats-form-group {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-
-.stats-form-group h4 {
-  margin: 0 0 16px;
-  font-size: 14px;
-  color: #fbbf24;
-}
-
-.icon-btn-circle {
-  background: rgba(255,255,255,0.05);
-  border: none;
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
-
-/* Photo Upload */
-.photo-upload-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.photo-preview-large {
-  width: 120px;
-  height: 120px;
-  border-radius: 20px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.preview-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.placeholder-icon {
-  color: rgba(255,255,255,0.2);
-}
-
-.studio-btn-secondary.mini {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-/* Biographical Profile Styles */
-.profile-stats-grid.biographical {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.bio-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: rgba(255,255,255,0.03);
-  padding: 16px 24px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.05);
-}
-
-.bio-icon {
-  color: #3b82f6;
-  opacity: 0.8;
-}
-
-.bio-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.bio-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #94a3b8;
-  letter-spacing: 1px;
-}
-
-.bio-val {
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-}
-
-.delete-btn-text {
-  background: transparent;
-  border: none;
-  color: #ef4444;
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-
-.delete-btn-text:hover {
-  opacity: 1;
-  text-decoration: underline;
-}
-
-.full-width { width: 100%; }
-.margin-top { margin-top: 24px; }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.8);
-  backdrop-filter: blur(8px);
-  z-index: 1000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-}
-
-.modal.profile-modal {
-  width: 95vw;
-  max-width: 1200px;
-  max-height: 90vh;
-  padding: 0;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: #111827;
-  border-radius: 24px;
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  animation: modalIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes modalIn {
-  from { opacity: 0; transform: scale(0.95) translateY(20px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.close-modal-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(0,0,0,0.5);
-  border: none;
-  color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  z-index: 10;
-  transition: all 0.2s;
-}
-
-.close-modal-btn:hover {
-  background: rgba(239, 68, 68, 0.8);
-  transform: rotate(90deg);
-}
-
-.modal-header-profile {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 16px 32px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  background: rgba(0,0,0,0.2);
-}
-
-.profile-photo-container {
-  position: relative;
-  width: 50px;
-  height: 50px;
-  background: rgba(0,0,0,0.3);
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-.profile-photo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
- Arkansas
-
-.profile-dorsal {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  background: #3b82f6;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 10px;
-  font-weight: 800;
-  color: white;
-}
-
-.profile-title h2 {
-  font-size: 24px;
-  margin: 0 0 4px 0;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-}
-
-.pos-badge-large {
-  display: inline-block;
-  padding: 6px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: white;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.modal-body-profile.extended-layout {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 32px;
-  padding: 32px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.profile-left-col {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.profile-right-col {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.analysis-section {
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.05);
-  height: 100%;
-}
-
-.section-header h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  color: #60a5fa;
-  margin: 0 0 20px 0;
-}
-
-/* Heatmap Canvas */
-.heatmap-canvas {
-  width: 100%;
-  aspect-ratio: 1.6/1;
-  background: #0f172a;
-  border-radius: 12px;
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.heatmap-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.heatmap-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
-}
-
-.field-lines {
-  position: absolute;
-  top: 10%; bottom: 10%; left: 5%; right: 5%;
-  border: 1px solid rgba(255,255,255,0.1);
-}
-
-.field-lines::after {
-  content: '';
-  position: absolute;
-  left: 50%; top: 0; bottom: 0;
-  border-left: 1px solid rgba(255,255,255,0.1);
-}
-
-.heat-blob {
-  width: 80px;
-  height: 80px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0) 70%);
-  filter: blur(8px);
-  position: absolute;
-  top: 40%; left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.placeholder-text {
-  z-index: 2;
-  color: #64748b;
-  font-size: 13px;
-}
-
-/* Reference Videos */
-.videos-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.video-reference-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 12px;
-  transition: all 0.2s;
-}
-
-.video-reference-item:hover {
-  background: rgba(255,255,255,0.06);
-  transform: translateY(-2px);
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-.video-thumb {
-  width: 56px;
-  height: 56px;
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #60a5fa;
-}
-
-.video-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.video-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-.video-link {
-  font-size: 12px;
-  color: #60a5fa;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.video-link:hover {
-  text-decoration: underline;
-}
-
-.empty-videos {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  color: #475569;
-  gap: 12px;
-}
-
-.empty-videos p {
-  margin: 0;
-  font-size: 14px;
-}
-
-.profile-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 32px;
-}
-
-.stat-box {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  transition: all 0.2s;
-}
-
-.stat-box:hover {
-  background: rgba(255,255,255,0.06);
-  transform: translateY(-2px);
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-.stat-icon {
-  color: #3b82f6;
-}
-
-.stat-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-text .value {
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.stat-text .label {
-  font-size: 12px;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.performance-summary {
-  background: rgba(59, 130, 246, 0.05);
-  border-left: 4px solid #3b82f6;
-  padding: 24px;
-  border-radius: 0 12px 12px 0;
-}
-
-.performance-summary h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  color: #60a5fa;
-}
-
-/* Analysis Form Sections */
-.analysis-form-section {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-
-.analysis-form-section h4 {
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: #60a5fa;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.heatmap-upload-area {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.heatmap-preview-mini {
-  width: 100px;
-  height: 60px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: #000;
-}
-
-.heatmap-preview-mini img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.video-add-form {
-  display: flex;
-  gap: 10px;
-  margin-bottom:  profile-stats-grid;
-}
-
-.video-add-form .studio-input {
-  flex: 1;
-  font-size: 12px;
-}
-
-.plus-btn {
-  background: #3b82f6 !important;
-  flex-shrink: 0;
-}
-
-.video-list-mini {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.v-mini-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  color: #60a5fa;
-}
-
-.remove-v {
-  background: transparent;
-  border: none;
-  color: #ef4444;
-  cursor: pointer;
-  font-weight: bold;
-  padding: 0 0 0 4px;
-}
-</style>

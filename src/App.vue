@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useAuthStore } from './store/auth'
-import { LayoutDashboard, Users, Video, BarChart2, LogOut, Brain } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
@@ -13,169 +12,87 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <div class="app-layout">
-    <nav v-if="auth.isAuthenticated" class="side-nav glass-card">
-      <div class="nav-logo">
-        <div class="logo-mini">ED</div>
-        <span>EDApp</span>
-      </div>
-      
-      <div class="nav-links">
-        <router-link to="/" class="nav-item" active-class="active">
-          <LayoutDashboard :size="20" />
-          <span>Inicio</span>
-        </router-link>
-        
-        <router-link to="/my-team" class="nav-item" active-class="active">
-          <Users :size="20" />
-          <span>Mi Equipo</span>
-        </router-link>
-        
-        <router-link to="/analyst" class="nav-item" active-class="active">
-          <Video :size="20" />
-          <span>Analista</span>
-        </router-link>
-        
-        <router-link to="/stats" class="nav-item" active-class="active">
-          <BarChart2 :size="20" />
-          <span>Estadísticas</span>
-        </router-link>
+  <div class="app-layout min-h-screen bg-surface text-on-background">
+    <template v-if="auth.isAuthenticated">
+      <!-- TopNavBar -->
+      <nav class="fixed top-0 w-full z-50 bg-[#070e1d]/80 backdrop-blur-xl border-b border-primary/15 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex justify-between items-center px-6 h-16">
+        <div class="flex items-center gap-8">
+          <span class="text-2xl font-black tracking-tighter text-primary font-headline uppercase whitespace-nowrap">Analyst Studio</span>
+          <div class="hidden md:flex gap-6 items-center">
+            <router-link to="/" class="font-headline tracking-tight font-bold uppercase text-sm transition-colors text-outline hover:text-on-surface" active-class="text-primary border-b-2 border-primary pb-1">
+              Inicio
+            </router-link>
+            <router-link to="/analyst" class="font-headline tracking-tight font-bold uppercase text-sm transition-colors text-outline hover:text-on-surface" active-class="text-primary border-b-2 border-primary pb-1">
+              Consola
+            </router-link>
+            <router-link to="/my-team" class="font-headline tracking-tight font-bold uppercase text-sm transition-colors text-outline hover:text-on-surface" active-class="text-primary border-b-2 border-primary pb-1">
+              Plantilla
+            </router-link>
+            <router-link to="/stats" class="font-headline tracking-tight font-bold uppercase text-sm transition-colors text-outline hover:text-on-surface" active-class="text-primary border-b-2 border-primary pb-1">
+              Estadísticas
+            </router-link>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="relative hidden lg:block">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+            <input class="bg-surface-container-highest border-none rounded-lg py-2 pl-10 pr-4 text-xs font-headline tracking-widest focus:ring-1 focus:ring-primary w-64 uppercase placeholder:text-outline text-on-surface" placeholder="BUSCAR..." type="text"/>
+          </div>
+          <button class="p-2 text-on-surface-variant hover:bg-primary/10 transition-all duration-200 active:scale-95 rounded">
+            <span class="material-symbols-outlined">notifications</span>
+          </button>
+          <button class="p-2 text-on-surface-variant hover:bg-primary/10 transition-all duration-200 active:scale-95 rounded">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+          <div class="h-8 w-8 rounded bg-primary-container overflow-hidden border border-primary/20">
+            <img alt="User Avatar" class="w-full h-full object-cover" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Analyst&backgroundColor=transparent"/>
+          </div>
+        </div>
+      </nav>
 
-        <router-link to="/ai-analysis" class="nav-item ai-btn" active-class="active">
-          <Brain :size="20" />
-          <span>Análisis IA</span>
-        </router-link>
-      </div>
+      <!-- SideNavBar -->
+      <aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-24 flex flex-col bg-[#0b1324] border-r border-white/5 z-40">
+        <div class="flex flex-col items-center py-4 space-y-2 flex-grow">
+          <router-link to="/analyst" class="flex flex-col items-center justify-center gap-1 text-outline hover:text-on-surface w-full py-4 transition-colors" active-class="!text-primary bg-primary/5 border-r-2 border-primary active:bg-primary/10">
+            <span class="material-symbols-outlined">movie</span>
+            <span class="font-headline text-[10px] font-medium uppercase tracking-widest">Clips</span>
+          </router-link>
+          
+          <router-link to="/ai-analysis" class="flex flex-col items-center justify-center gap-1 text-outline hover:text-on-surface w-full py-4 transition-colors" active-class="!text-primary bg-primary/5 border-r-2 border-primary active:bg-primary/10">
+            <span class="material-symbols-outlined">insights</span>
+            <span class="font-headline text-[10px] font-medium uppercase tracking-widest">IA</span>
+          </router-link>
+        </div>
+        
+        <div class="pb-6 flex flex-col items-center space-y-4">
+          <button class="text-outline hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+          <button @click="handleLogout" class="text-outline hover:text-error transition-colors">
+            <span class="material-symbols-outlined">logout</span>
+          </button>
+        </div>
+      </aside>
 
-      <button @click="handleLogout" class="logout-btn">
-        <LogOut :size="20" />
-        <span>Cerrar Sesión</span>
-      </button>
-    </nav>
-
-    <main class="content">
+      <!-- Main Content Canvas -->
+      <main class="ml-24 mt-16 p-8 min-h-[calc(100vh-64px)] bg-surface">
+        <router-view />
+      </main>
+    </template>
+    <template v-else>
       <router-view />
-    </main>
+    </template>
   </div>
 </template>
 
 <style>
 @import './styles/base.css';
 
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-}
-
-.side-nav {
-  width: 260px;
-  margin: 20px;
-  height: calc(100vh - 40px);
-  padding: 30px 20px;
-  display: flex;
-  flex-direction: column;
-  position: sticky;
-  top: 20px;
-  border-radius: 24px !important;
-}
-
-.nav-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 48px;
-  font-weight: 700;
-  font-size: 20px;
-}
-
-.logo-mini {
-  background: var(--primary);
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 14px;
-}
-
-.nav-links {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-grow: 1;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  text-decoration: none;
-  color: var(--text-muted);
-  border-radius: 12px;
-  transition: all 0.2s ease;
-}
-
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: white;
-}
-
-.nav-item.active {
-  background: var(--primary);
-  color: white;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-}
-
-.ai-btn {
-  margin-top: auto;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  color: #c4b5fd;
-}
-
-.ai-btn:hover {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
-}
-
-.ai-btn.active {
-  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
-  color: white;
-  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
-}
-
-.content {
-  flex-grow: 1;
-  padding: 40px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.logout-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  border-radius: 12px;
-  transition: all 0.2s ease;
+/* Override base styles that could conflict with Tailwind */
+body, #app {
+  margin: 0;
+  padding: 0;
   width: 100%;
-}
-
-.logout-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--danger);
-}
-
-@media (max-width: 768px) {
-  .side-nav {
-    display: none; /* Add mobile nav later */
-  }
+  min-height: 100vh;
 }
 </style>

@@ -1,12 +1,98 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>edapp-front</title>
+    <title>Analyst Studio | EDApp</title>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-background": "#dfe5fb",
+                        "surface-container-highest": "#1c253b",
+                        "on-secondary-container": "#f7f7ff",
+                        "on-secondary": "#001e4a",
+                        "on-tertiary": "#080079",
+                        "on-primary-container": "#002919",
+                        "surface-container": "#11192b",
+                        "on-surface": "#dfe5fb",
+                        "on-secondary-fixed-variant": "#004da8",
+                        "secondary-container": "#005ac2",
+                        "inverse-primary": "#006d4a",
+                        "primary": "#69f6b8",
+                        "surface-tint": "#69f6b8",
+                        "error-dim": "#d7383b",
+                        "surface-container-high": "#161f33",
+                        "tertiary-fixed": "#a6a9ff",
+                        "on-primary-fixed-variant": "#006544",
+                        "on-primary-fixed": "#00452d",
+                        "tertiary-fixed-dim": "#9699ff",
+                        "on-primary": "#005a3c",
+                        "background": "#070e1d",
+                        "primary-container": "#06b77f",
+                        "inverse-on-surface": "#4e5567",
+                        "surface-variant": "#1c253b",
+                        "surface-container-lowest": "#000000",
+                        "secondary-fixed": "#bfd1ff",
+                        "on-tertiary-container": "#000000",
+                        "secondary-dim": "#699cff",
+                        "outline-variant": "#414859",
+                        "surface-bright": "#212c43",
+                        "secondary-fixed-dim": "#a9c4ff",
+                        "on-error-container": "#ffa8a3",
+                        "outline": "#6e7588",
+                        "surface": "#070e1d",
+                        "tertiary-container": "#7073ff",
+                        "on-surface-variant": "#a4abbf",
+                        "error": "#ff716c",
+                        "inverse-surface": "#faf9ff",
+                        "on-error": "#490006",
+                        "primary-fixed-dim": "#58e7ab",
+                        "on-tertiary-fixed-variant": "#1e18b2",
+                        "secondary": "#699cff",
+                        "tertiary-dim": "#6063ee",
+                        "on-tertiary-fixed": "#050061",
+                        "surface-dim": "#070e1d",
+                        "surface-container-low": "#0b1324",
+                        "tertiary": "#9093ff",
+                        "error-container": "#9f0519",
+                        "primary-dim": "#58e7ab",
+                        "primary-fixed": "#69f6b8",
+                        "on-secondary-fixed": "#003271"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Space Grotesk"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            backdrop-filter: blur(24px);
+            background: rgba(28, 37, 59, 0.6);
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #070e1d; }
+        ::-webkit-scrollbar-thumb { background: #1c253b; border-radius: 10px; }
+    </style>
   </head>
-  <body>
+  <body class="bg-background text-on-background font-body selection:bg-primary selection:text-on-primary-container">
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
