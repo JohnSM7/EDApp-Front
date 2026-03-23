@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import {
-  Play, Pause, RotateCcw, Pencil,
-  Volume2, VolumeX, Maximize
+  Pencil, Trash2, 
+  Play, Pause, RotateCcw,
+  Volume2, VolumeX, Maximize,
+  Move, Minus, MoveUpRight, Circle, Square, Sun, PaintBucket, Eraser,
+  Type, Target, Box
 } from 'lucide-vue-next'
 import DrawingLayer from '../components/DrawingLayer.vue'
 import { useAnalystStore } from '../store/analyst'
+import { storeToRefs } from 'pinia'
 
 const analystStore = useAnalystStore()
+const { drawingTool, drawingColor, isDrawingFilled } = storeToRefs(analystStore)
 const videoElement = ref<HTMLVideoElement | null>(null)
 const videoUrl = ref<string | null>(null)
 const isPlaying = ref(false)
@@ -24,6 +29,7 @@ const clipEndTime = ref<number>(0)
 
 const videoChannel = new BroadcastChannel('analyst-video')
 const playbackRate = ref(1.0)
+const drawingLayerRef = ref<any>(null)
 
 // Tactical auto-pause state
 const isAutoPaused = ref(false)
@@ -65,6 +71,12 @@ onMounted(() => {
          clipStartTime.value = event.data.startTime || 0
          clipEndTime.value = event.data.endTime || 0
       }
+    }
+    if (event.data.type === 'SYNC_DRAWING_STATE') {
+       isDrawing.value = event.data.isDrawing
+       drawingTool.value = event.data.tool
+       drawingColor.value = event.data.color
+       isDrawingFilled.value = event.data.isFilled
     }
   }
 
@@ -223,7 +235,6 @@ const updateVolume = (val: number) => {
 
 const toggleFullscreen = () => {
   if (!videoElement.value) return
-  // Go full screen with the entire window container to keep controls visible
   const container = document.querySelector('.video-window')
   if (!container) return
 
@@ -235,6 +246,25 @@ const toggleFullscreen = () => {
     document.exitFullscreen()
   }
 }
+
+// Sync drawing state back to main window if changed here
+watch([isDrawing, drawingTool, drawingColor, isDrawingFilled], () => {
+  videoChannel.postMessage({
+    type: 'SYNC_DRAWING_STATE',
+    isDrawing: isDrawing.value,
+    tool: drawingTool.value,
+    color: drawingColor.value,
+    isFilled: isDrawingFilled.value
+  })
+})
+
+const hexToRgba = (hex: string, opacity: number) => {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
 </script>
 
 <template>
@@ -243,81 +273,139 @@ const toggleFullscreen = () => {
       <h3>Sincronizando vídeo con ventana principal...</h3>
     </div>
     
-    <div v-else class="video-window">
-      <div class="video-frame glass-card">
-        <video 
-          ref="videoElement" 
-          :src="videoUrl" 
-          class="main-video"
-          @timeupdate="onVideoTimeUpdate"
-          @loadedmetadata="duration = videoElement!.duration; videoChannel.postMessage({ type: 'DURATION_UPDATE', duration: duration })"
-          @play="onVideoPlay"
-          @pause="onVideoPause"
-          @click="togglePlay"
-        ></video>
-        <DrawingLayer :active="isDrawing" :current-time="currentTime" :active-clip-id="activeClipId" class="absolute inset-0 pointer-events-none" :style="isDrawing ? 'pointer-events: auto;' : ''" />
-
-        <!-- Title Overlay -->
-        <transition name="fade">
-           <div v-if="activeClipId && showTitleOverlay" class="absolute bottom-16 left-8 right-8 z-30 pointer-events-none flex flex-col items-center">
-              <div class="bg-surface-container-highest/90 backdrop-blur-xl border-l-[4px] border-primary px-6 py-4 rounded-xl shadow-2xl transform transition-transform">
-                <h2 class="text-xl md:text-3xl font-headline font-black uppercase tracking-widest text-white shadow-black drop-shadow-md text-center">{{ clipName }}</h2>
-                <p v-if="clipDescription" class="text-sm text-tertiary mt-1 font-medium text-center">{{ clipDescription }}</p>
-              </div>
-           </div>
-        </transition>
-            
-            <!-- Tactical Auto-pause indicator -->
-            <transition name="fade">
-               <div v-if="isAutoPaused" class="absolute top-8 left-1/2 -translate-x-1/2 z-40">
-                  <div class="bg-red-500/90 text-white font-headline uppercase font-black tracking-[0.2em] text-[10px] px-6 py-2 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)] border border-white/20 animate-pulse backdrop-blur-md">
-                     Pausa Táctica (3s)
-                  </div>
-               </div>
-            </transition>
+    <div v-else class="video-window relative flex">
+      <!-- Drawing Tools Sidebar (LEFT) -->
+      <transition name="slide-left">
+        <div v-if="isDrawing" class="w-20 bg-[#0f121d] border-r border-white/5 flex flex-col items-center py-4 gap-3 z-50 shrink-0 shadow-2xl overflow-y-auto scrollbar-none">
+          <div class="grid grid-cols-2 gap-2 px-2 w-full justify-items-center">
+            <button @click="drawingTool = 'select'" :class="drawingTool === 'select' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Move class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'pencil'" :class="drawingTool === 'pencil' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Pencil class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'line'" :class="drawingTool === 'line' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Minus class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'arrow'" :class="drawingTool === 'arrow' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <MoveUpRight class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'poly'" :class="drawingTool === 'poly' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Box class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'text'" :class="drawingTool === 'text' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Type class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'circle'" :class="drawingTool === 'circle' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Circle class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'marker'" :class="drawingTool === 'marker' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Target class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'spotlight'" :class="drawingTool === 'spotlight' ? 'bg-primary text-on-primary-container shadow-lg' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Sun class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <button @click="drawingTool = 'eraser'" :class="drawingTool === 'eraser' ? 'bg-red-500 text-white shadow-lg' : 'text-red-400/60 hover:bg-red-500/10' " class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shrink-0">
+              <Eraser class="w-4 h-4" stroke-width="2.5" />
+            </button>
           </div>
-
-      <div class="transport-bar">
-        <div class="seeker">
-          <input 
-            type="range" :max="duration" step="0.01" :value="currentTime"
-            @input="seekTo(Number(($event.target as HTMLInputElement).value))"
-          >
+          <div class="h-px bg-white/5 w-10 mx-auto"></div>
+          <div class="grid grid-cols-2 gap-2 px-2 w-full justify-items-center">
+            <button @click="isDrawingFilled = !isDrawingFilled" :class="isDrawingFilled ? 'bg-primary/20 text-primary ring-1 ring-primary/30' : 'text-slate-400 hover:bg-white/10'" class="w-8 h-8 rounded-lg transition-all flex items-center justify-center shadow-lg">
+              <PaintBucket class="w-4 h-4" stroke-width="2.5" />
+            </button>
+            <div class="grid grid-cols-2 gap-1 items-center">
+               <div @click="drawingColor = '#10b981'" class="w-3 h-3 rounded-full cursor-pointer" :class="{'ring-2 ring-white': drawingColor === '#10b981'}" style="background: #10b981"></div>
+               <div @click="drawingColor = '#ef4444'" class="w-3 h-3 rounded-full cursor-pointer" :class="{'ring-2 ring-white': drawingColor === '#ef4444'}" style="background: #ef4444"></div>
+               <div @click="drawingColor = '#3b82f6'" class="w-3 h-3 rounded-full cursor-pointer" :class="{'ring-2 ring-white': drawingColor === '#3b82f6'}" style="background: #3b82f6"></div>
+               <div @click="drawingColor = '#ffeb3b'" class="w-3 h-3 rounded-full cursor-pointer" :class="{'ring-2 ring-white': drawingColor === '#ffeb3b'}" style="background: #ffeb3b"></div>
+            </div>
+          </div>
+          <button @click="drawingLayerRef?.clearFrame()" class="w-8 h-8 rounded-lg text-slate-400 hover:bg-red-500/20 hover:text-red-500 transition-all flex items-center justify-center shrink-0 mt-auto">
+            <Trash2 class="w-4 h-4" stroke-width="2.5" />
+          </button>
         </div>
-        <div class="controls-row">
-          <div class="grp">
-            <button @click="skipTime(-5)" class="transport-btn"><RotateCcw :size="18" /> -5s</button>
-            <button @click="togglePlay" class="play-btn">
-              <Pause v-if="isPlaying" :size="24" />
-              <Play v-else :size="24" />
-            </button>
-            <button @click="skipTime(5)" class="transport-btn">+5s <RotateCcw :size="18" style="transform: scaleX(-1)" /></button>
+      </transition>
+
+      <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-black relative">
+        <div class="flex-1 relative flex items-center justify-center overflow-hidden">
+          <video 
+            ref="videoElement" 
+            :src="videoUrl" 
+            class="max-w-full max-h-full object-contain"
+            @timeupdate="onVideoTimeUpdate"
+            @loadedmetadata="duration = videoElement!.duration; videoChannel.postMessage({ type: 'DURATION_UPDATE', duration: duration })"
+            @play="onVideoPlay"
+            @pause="onVideoPause"
+          ></video>
+          <DrawingLayer ref="drawingLayerRef" :active="isDrawing" :current-time="currentTime" :active-clip-id="activeClipId" class="absolute inset-0" :style="isDrawing ? 'pointer-events: auto;' : 'pointer-events: none;'" />
+
+          <!-- Title Overlay -->
+          <transition name="fade">
+             <div v-if="activeClipId && showTitleOverlay" class="absolute bottom-12 left-6 right-6 z-30 pointer-events-none flex flex-col items-center">
+                <div class="bg-black/40 backdrop-blur-xl border-l-[4px] border-primary px-6 py-4 rounded-xl shadow-2xl">
+                  <h2 class="text-xl md:text-3xl font-headline font-black uppercase tracking-widest text-white text-center">{{ clipName }}</h2>
+                  <p v-if="clipDescription" class="text-sm text-slate-400 mt-1 font-medium text-center">{{ clipDescription }}</p>
+                </div>
+             </div>
+          </transition>
+              
+          <!-- Tactical Auto-pause indicator -->
+          <transition name="fade">
+             <div v-if="isAutoPaused" class="absolute top-8 left-1/2 -translate-x-1/2 z-40">
+                <div class="bg-red-500/90 text-white font-headline uppercase font-black tracking-[0.2em] text-[10px] px-6 py-2 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)] border border-white/20 animate-pulse backdrop-blur-md">
+                   Pausa Táctica (3s)
+                </div>
+             </div>
+          </transition>
+        </div>
+
+        <!-- NEW PREMIUM TRANSPORT BAR -->
+        <div class="h-14 bg-[#0f172a] border-t border-white/10 flex flex-col px-4 z-[120] shrink-0">
+          <!-- Timeline -->
+          <div class="w-full flex flex-col py-1">
+             <div class="flex justify-between w-full text-[8px] font-headline font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">
+                <span>{{ formatTime(currentTime) }}</span>
+                <span>{{ formatTime(duration) }}</span>
+             </div>
+             <input type="range" class="w-full h-1 rounded-full appearance-none bg-slate-800 cursor-pointer accent-primary" :max="duration" step="0.01" :value="currentTime" @input="seekTo(Number(($event.target as HTMLInputElement).value))">
           </div>
-          <div class="time-readout">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</div>
-          <div class="audio-controls">
-            <button @click="toggleMute" class="transport-btn">
-              <VolumeX v-if="isMuted || volume === 0" :size="18" />
-              <Volume2 v-else :size="18" />
-            </button>
-            <input 
-              type="range" min="0" max="1" step="0.05" :value="isMuted ? 0 : volume"
-              @input="updateVolume(Number(($event.target as HTMLInputElement).value))"
-              class="volume-slider"
-            >
-            <select v-model="playbackRate" class="bg-transparent text-[10px] font-bold text-on-surface hover:text-primary outline-none cursor-pointer hidden md:block">
-              <option :value="0.5">x0.5</option>
-              <option :value="1">x1.0</option>
-              <option :value="2">x2.0</option>
-              <option :value="5">x5.0</option>
-            </select>
-            <button @click="isDrawing = !isDrawing" :class="[isDrawing ? 'text-primary' : '', !activeClipId ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white/5']" class="transport-btn bg-transparent" style="margin-left: 10px;" :disabled="!activeClipId" :title="activeClipId ? 'Capa de Dibujo' : 'Selecciona un Recorte Primero'">
-              <Pencil :size="18" />
-            </button>
-            <button @click="toggleFullscreen" class="transport-btn fullscreen-btn ml-2"><Maximize :size="18" /></button>
+
+          <div class="flex items-center justify-between pb-1">
+            <div class="flex items-center gap-3">
+              <button @click="skipTime(-5)" class="text-slate-400 hover:text-primary transition-colors"><RotateCcw :size="14"/></button>
+              <button @click="togglePlay" class="w-8 h-8 bg-primary text-[#0f172a] rounded-lg flex items-center justify-center hover:scale-105 transition-all shadow-lg">
+                <Pause v-if="isPlaying" :size="18" style="fill: currentColor" />
+                <Play v-else :size="18" style="fill: currentColor" />
+              </button>
+              <button @click="skipTime(5)" class="text-slate-400 hover:text-primary transition-colors"><RotateCcw :size="14" style="transform: scaleX(-1)"/></button>
+            </div>
+
+            <div class="flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <button @click="toggleMute" class="text-slate-400 hover:text-primary transition-colors"><VolumeX v-if="isMuted || volume === 0" :size="16"/><Volume2 v-else :size="16"/></button>
+                <input type="range" class="w-20 h-0.5 appearance-none bg-slate-800 rounded-full accent-primary" min="0" max="1" step="0.1" :value="volume" @input="updateVolume(Number(($event.target as HTMLInputElement).value))">
+              </div>
+
+              <div class="h-4 w-px bg-white/10 mx-1"></div>
+
+              <select v-model="playbackRate" class="bg-transparent text-[10px] font-bold text-slate-300 hover:text-primary outline-none cursor-pointer appearance-none px-2 uppercase tracking-tighter">
+                <option :value="0.5">x0.5</option>
+                <option :value="1">x1.0</option>
+                <option :value="2">x2.0</option>
+                <option :value="5">x5.0</option>
+              </select>
+
+              <button @click="isDrawing = !isDrawing" :disabled="!activeClipId" :class="[isDrawing ? 'text-primary bg-primary/10' : 'text-slate-400', !activeClipId ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white/5']" class="p-1.5 rounded-lg transition-all">
+                <Pencil :size="16"/>
+              </button>
+              <button @click="toggleFullscreen" class="p-1.5 text-slate-400 hover:bg-white/5 rounded-lg transition-colors"><Maximize :size="16"/></button>
+            </div>
           </div>
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -325,10 +413,9 @@ const toggleFullscreen = () => {
 .video-only-studio {
   height: 100vh;
   display: flex;
-  background: #0f121d;
+  background: #090b11;
   color: white;
-  padding: 10px;
-  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .loading-state {
@@ -336,98 +423,56 @@ const toggleFullscreen = () => {
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: #94a3b8;
+  color: #64748b;
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .video-window {
   flex: 1;
-  background: rgba(0,0,0,0.4);
   display: flex;
-  flex-direction: column;
-  border-radius: 8px;
 }
 
-.video-frame {
-  flex: 1;
-  position: relative;
-  background: #000;
-  border-radius: 8px 8px 0 0;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 
-.main-video {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.transport-bar {
-  padding: 2px 10px;
-  background: rgba(15, 23, 42, 0.95);
-  border-radius: 0 0 8px 8px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-
-.seeker input {
-  width: 100%;
-  accent-color: var(--primary);
-  margin-bottom: 2px;
-  height: 12px;
-}
-
-.controls-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.grp {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.play-btn {
-  width: 24px;
-  height: 24px;
-  background: var(--primary);
-  border: none;
-  border-radius: 4px;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.transport-btn {
+/* Range input styling for a premium look */
+input[type=range] {
+  -webkit-appearance: none;
   background: transparent;
-  border: none;
-  color: #94a3b8;
+}
+input[type=range]:focus {
+  outline: none;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 9px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
 }
-
-.audio-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.volume-slider {
-  width: 40px;
-  accent-color: var(--primary);
-}
-
-.time-readout {
-  font-family: monospace;
-  font-size: 10px;
-  color: #e2e8f0;
+input[type=range]::-webkit-slider-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -4px;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 </style>

@@ -210,6 +210,12 @@ videoChannel.onmessage = (event) => {
   if (event.data.type === 'CLOSE') {
     isVideoExternal.value = false
   }
+  if (event.data.type === 'SYNC_DRAWING_STATE') {
+    isDrawing.value = event.data.isDrawing
+    drawingTool.value = event.data.tool
+    drawingColor.value = event.data.color
+    isDrawingFilled.value = event.data.isFilled
+  }
 }
 
 watch([isPlaying, volume, isMuted], ([newIsPlaying, newVolume, newIsMuted]) => {
@@ -222,6 +228,30 @@ watch([isPlaying, volume, isMuted], ([newIsPlaying, newVolume, newIsMuted]) => {
 watch(selectedClip, (newClip) => {
   if (isVideoExternal.value) {
     videoChannel.postMessage({ type: 'SELECTED_CLIP', clipId: newClip?.id })
+    // Sync title/desc too for the external overlay
+    if (newClip) {
+       videoChannel.postMessage({ 
+         type: 'SELECTED_CLIP', 
+         clipId: newClip.id, 
+         name: newClip.name, 
+         description: newClip.description, 
+         startTime: newClip.startTime,
+         endTime: newClip.endTime
+       })
+    }
+  }
+})
+
+// Sync drawing state to external window
+watch([isDrawing, drawingTool, drawingColor, isDrawingFilled], () => {
+  if (isVideoExternal.value) {
+    videoChannel.postMessage({
+      type: 'SYNC_DRAWING_STATE',
+      isDrawing: isDrawing.value,
+      tool: drawingTool.value,
+      color: drawingColor.value,
+      isFilled: isDrawingFilled.value
+    })
   }
 })
 
