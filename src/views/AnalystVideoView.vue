@@ -4,7 +4,7 @@ import {
   Pencil, Trash2, 
   Play, Pause, RotateCcw,
   Volume2, VolumeX, Maximize,
-  Move, Minus, MoveUpRight, Circle, Square, Sun, PaintBucket, Eraser,
+  Move, Minus, MoveUpRight, Circle, Sun, PaintBucket, Eraser,
   Type, Target, Box
 } from 'lucide-vue-next'
 import DrawingLayer from '../components/DrawingLayer.vue'
@@ -258,12 +258,6 @@ watch([isDrawing, drawingTool, drawingColor, isDrawingFilled], () => {
   })
 })
 
-const hexToRgba = (hex: string, opacity: number) => {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`
-}
 
 </script>
 
