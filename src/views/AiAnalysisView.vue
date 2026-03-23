@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Brain, UploadCloud, FileSpreadsheet, PlayCircle, Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { Loader2 } from 'lucide-vue-next'
 
 const videoFile = ref<File | null>(null)
 const dataFile = ref<File | null>(null)
@@ -61,96 +61,104 @@ const startAnalysis = async () => {
 }
 
 </script>
-
 <template>
-  <div class="ai-view">
-    <header class="page-header">
-      <div class="header-main">
-        <div class="title-with-icon">
-          <div class="icon-glow"><Brain :size="28" /></div>
-          <h1>EDApp AI Engine</h1>
+  <div class="ai-view grid grid-cols-1 md:grid-cols-12 gap-8 my-8 text-on-background h-auto lg:h-[calc(100vh-120px)]">
+    <div class="col-span-12">
+      <header class="flex flex-col gap-2 p-6 bg-surface-container rounded-xl border border-white/5 shadow-xl">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 bg-tertiary/10 rounded-xl flex items-center justify-center text-tertiary shadow-[0_0_20px_rgba(203,166,247,0.3)]">
+              <span class="material-symbols-outlined text-3xl">psychology</span>
+            </div>
+            <h1 class="text-3xl font-black font-headline tracking-tighter uppercase text-transparent bg-clip-text bg-gradient-to-r from-white to-tertiary">EDApp AI Engine</h1>
+          </div>
+          <span class="bg-secondary/10 text-secondary border border-secondary/30 px-4 py-1.5 rounded-full text-xs font-bold font-headline tracking-widest uppercase shadow-[0_0_15px_rgba(245,158,11,0.2)]">BETA v0.9</span>
         </div>
-        <span class="beta-badge">BETA v0.9</span>
-      </div>
-      <p>Sube el video del partido y los datos GPS/Estadísticos para generar un análisis táctico automatizado con Inteligencia Artificial.</p>
-    </header>
+        <p class="text-xs font-label text-on-surface-variant tracking-widest uppercase mt-2">Sube el video del partido y los datos GPS/Estadísticos para generar un análisis táctico automatizado con Inteligencia Artificial.</p>
+      </header>
+    </div>
 
-    <div class="ai-grid">
-      <!-- Upload Section -->
-      <div class="upload-panel glass-card">
-        <h3>Archivos de Entrada</h3>
+    <!-- Upload Section -->
+    <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
+      <div class="bg-surface-container-low p-6 flex flex-col gap-6 rounded-xl border border-white/5 shadow-2xl h-full">
+        <h3 class="font-headline text-lg font-bold uppercase tracking-widest text-on-surface border-b border-white/5 pb-4">Archivos de Entrada</h3>
         
-        <div class="upload-zone" :class="{ 'has-file': videoFile }">
+        <div class="relative group cursor-pointer border-2 border-dashed rounded-xl transition-all duration-300" :class="videoFile ? 'border-primary/50 bg-primary/5' : 'border-white/10 hover:border-tertiary/50 hover:bg-tertiary/5'">
           <input type="file" @change="handleVideoUpload" accept="video/mp4,video/mov,video/webm" hidden id="vid-upload">
-          <label for="vid-upload" class="upload-label">
-             <div class="icon-circle" :class="{ 'success': videoFile }">
-               <CheckCircle2 v-if="videoFile" :size="24" />
-               <UploadCloud v-else :size="24" />
+          <label for="vid-upload" class="flex items-center gap-6 p-6 cursor-pointer w-full h-full">
+             <div class="w-12 h-12 rounded-full flex items-center justify-center transition-colors" :class="videoFile ? 'bg-primary text-on-primary-container shadow-[0_0_15px_rgba(105,246,184,0.4)]' : 'bg-surface-container-highest text-outline'">
+               <span class="material-symbols-outlined text-2xl">{{ videoFile ? 'check_circle' : 'cloud_upload' }}</span>
              </div>
-             <div class="upload-text">
-               <h4>{{ videoFile ? 'Video Seleccionado' : 'Subir Video Principal' }}</h4>
-               <p>{{ videoFile ? videoFile.name : 'MP4, MOV hasta 4K' }}</p>
+             <div class="flex-grow min-w-0">
+               <h4 class="text-sm font-bold font-headline uppercase tracking-widest text-white mb-1 truncate">{{ videoFile ? 'Video Seleccionado' : 'Subir Video Principal' }}</h4>
+               <p class="text-xs text-on-surface-variant truncate">{{ videoFile ? videoFile.name : 'MP4, MOV hasta 4K' }}</p>
              </div>
-             <button class="select-btn">{{ videoFile ? 'Cambiar' : 'Seleccionar' }}</button>
+             <button class="shrink-0 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-headline font-bold uppercase transition-colors text-white">{{ videoFile ? 'Cambiar' : 'Seleccionar' }}</button>
           </label>
         </div>
 
-        <div class="upload-zone" :class="{ 'has-file': dataFile }">
+        <div class="relative group cursor-pointer border-2 border-dashed rounded-xl transition-all duration-300" :class="dataFile ? 'border-primary/50 bg-primary/5' : 'border-white/10 hover:border-tertiary/50 hover:bg-tertiary/5'">
           <input type="file" @change="handleDataUpload" accept=".xlsx,.csv" hidden id="data-upload">
-          <label for="data-upload" class="upload-label">
-             <div class="icon-circle" :class="{ 'success': dataFile }">
-               <CheckCircle2 v-if="dataFile" :size="24" />
-               <FileSpreadsheet v-else :size="24" />
+          <label for="data-upload" class="flex items-center gap-6 p-6 cursor-pointer w-full h-full">
+             <div class="w-12 h-12 rounded-full flex items-center justify-center transition-colors" :class="dataFile ? 'bg-primary text-on-primary-container shadow-[0_0_15px_rgba(105,246,184,0.4)]' : 'bg-surface-container-highest text-outline'">
+               <span class="material-symbols-outlined text-2xl">{{ dataFile ? 'check_circle' : 'table' }}</span>
              </div>
-             <div class="upload-text">
-               <h4>{{ dataFile ? 'Datos Seleccionados' : 'Tracking Data (Opcional)' }}</h4>
-               <p>{{ dataFile ? dataFile.name : 'Excel o CSV (GPS/Instat)' }}</p>
+             <div class="flex-grow min-w-0">
+               <h4 class="text-sm font-bold font-headline uppercase tracking-widest text-white mb-1 truncate">{{ dataFile ? 'Datos Seleccionados' : 'Tracking Data (Opcional)' }}</h4>
+               <p class="text-xs text-on-surface-variant truncate">{{ dataFile ? dataFile.name : 'Excel o CSV (GPS/Instat)' }}</p>
              </div>
-             <button class="select-btn">{{ dataFile ? 'Cambiar' : 'Seleccionar' }}</button>
+             <button class="shrink-0 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-headline font-bold uppercase transition-colors text-white">{{ dataFile ? 'Cambiar' : 'Seleccionar' }}</button>
           </label>
         </div>
 
         <button 
-          class="run-ai-btn" 
+          class="mt-auto w-full py-5 rounded-xl text-white font-headline text-sm font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          :class="!videoFile || isAnalyzing ? 'bg-surface-container-highest text-outline' : 'bg-gradient-to-r from-tertiary to-[#5c3c92] hover:scale-[1.02] shadow-[0_10px_30px_rgba(203,166,247,0.4)]'"
           :disabled="!videoFile || isAnalyzing"
           @click="startAnalysis"
         >
-          <div v-if="isAnalyzing" class="ai-running">
-            <Loader2 :size="20" class="spin" />
-            Procesando... {{ progress }}%
-          </div>
-          <div v-else class="ai-ready">
-            <PlayCircle :size="20" />
-            Iniciar Motor de IA
-          </div>
+          <template v-if="isAnalyzing">
+            <Loader2 :size="20" class="animate-spin" />
+            <span>Procesando... {{ progress }}%</span>
+          </template>
+          <template v-else>
+            <span class="material-symbols-outlined text-2xl">smart_toy</span>
+            <span>Iniciar Motor de IA (YOLOv8)</span>
+          </template>
         </button>
       </div>
+    </div>
 
-      <!-- Processing Console -->
-      <div class="console-panel glass-card">
-         <div class="console-header">
-           <div class="terminal-dots"><span></span><span></span><span></span></div>
-           <span>Python Backend Output</span>
-         </div>
-         <div class="console-body">
-           <div v-if="logs.length === 0" class="console-empty">
-             > Esperando inicio del procesamiento...
+    <!-- Processing Console -->
+    <div class="col-span-12 lg:col-span-7 h-full flex flex-col">
+      <div class="bg-black/40 rounded-xl border border-white/5 shadow-2xl flex flex-col flex-grow overflow-hidden min-h-[400px]">
+         <div class="flex items-center gap-4 px-6 py-4 bg-surface-container/50 border-b border-white/5">
+           <div class="flex gap-2">
+             <span class="w-3 h-3 rounded-full bg-error"></span>
+             <span class="w-3 h-3 rounded-full bg-secondary"></span>
+             <span class="w-3 h-3 rounded-full bg-primary"></span>
            </div>
-           <div v-else class="log-entries">
-             <div v-for="(log, idx) in logs" :key="idx" class="log-line">
-               <span class="timestamp">[{{ new Date().toISOString().substring(11, 19) }}]</span>
-               <span class="msg" :class="{ 'success': log.includes('✅') }">{{ log }}</span>
+           <span class="font-mono text-xs text-outline tracking-wider">Python Backend Terminal</span>
+         </div>
+         <div class="p-6 font-mono text-xs text-on-surface-variant flex-grow overflow-y-auto bg-transparent leading-relaxed custom-scrollbar">
+           <div v-if="logs.length === 0" class="text-outline italic">
+             > Esperando inicio del procesamiento remoto...
+           </div>
+           <div v-else class="space-y-2">
+             <div v-for="(log, idx) in logs" :key="idx" class="flex gap-4 animate-[slideUp_0.3s_ease-out]">
+               <span class="text-tertiary opacity-80 shrink-0">[{{ new Date().toISOString().substring(11, 19) }}]</span>
+               <span :class="log.includes('✅') ? 'text-primary font-bold' : 'text-white/80'">{{ log }}</span>
              </div>
            </div>
          </div>
          
          <!-- Result Action -->
-         <div v-if="analysisComplete" class="result-action">
-           <div class="result-banner">
-             <CheckCircle2 :size="20" color="#10b981" />
-             <span>Modelos tácticos generados exitosamente.</span>
+         <div v-if="analysisComplete" class="p-6 bg-primary/5 border-t border-primary/20 animate-[slideUp_0.4s_ease-out] flex flex-col gap-4">
+           <div class="flex items-center gap-3 text-primary font-bold text-sm">
+             <span class="material-symbols-outlined">check_circle</span>
+             <span>Modelos tácticos y datos GPS generados exitosamente.</span>
            </div>
-           <button class="btn-primary" @click="$router.push('/stats')">
+           <button class="self-start px-6 py-3 bg-primary text-on-primary-container hover:bg-primary-container rounded-lg font-headline text-xs font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(105,246,184,0.3)] transition-all" @click="$router.push('/stats')">
              Ver Dashboard de Resultados
            </button>
          </div>
@@ -158,283 +166,3 @@ const startAnalysis = async () => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.page-header {
-  margin-bottom: 32px;
-}
-
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.title-with-icon {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.title-with-icon h1 {
-  font-size: 32px;
-  margin: 0;
-  background: linear-gradient(to right, #fff, #c4b5fd);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.icon-glow {
-  width: 56px;
-  height: 56px;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 16px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #8b5cf6;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
-}
-
-.beta-badge {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.ai-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-/* Upload Panel */
-.upload-panel {
-  padding: 30px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.upload-panel h3 {
-  margin: 0 0 10px 0;
-  font-size: 18px;
-}
-
-.upload-zone {
-  border: 2px dashed rgba(255,255,255,0.1);
-  border-radius: 12px;
-  transition: all 0.3s;
-}
-
-.upload-zone:hover {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(139, 92, 246, 0.02);
-}
-
-.upload-zone.has-file {
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.05);
-  border-style: solid;
-}
-
-.upload-label {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 24px;
-  cursor: pointer;
-  width: 100%;
-}
-
-.icon-circle {
-  width: 48px;
-  height: 48px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #94a3b8;
-}
-
-.icon-circle.success {
-  background: #10b981;
-  color: white;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-}
-
-.upload-text {
-  flex-grow: 1;
-}
-
-.upload-text h4 {
-  margin: 0 0 4px 0;
-  font-size: 15px;
-}
-
-.upload-text p {
-  margin: 0;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.select-btn {
-  background: rgba(255,255,255,0.1);
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  color: white;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.run-ai-btn {
-  margin-top: auto;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-  border: none;
-  padding: 16px;
-  border-radius: 12px;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
-}
-
-.run-ai-btn:disabled {
-  background: rgba(255,255,255,0.05);
-  color: #94a3b8;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-.run-ai-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.6);
-}
-
-.ai-ready, .ai-running {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-
-/* Console Panel */
-.console-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-  background: rgba(0,0,0,0.4);
-}
-
-.console-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 20px;
-  background: rgba(255,255,255,0.05);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  font-family: monospace;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.terminal-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.terminal-dots span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #475569;
-}
-.terminal-dots span:nth-child(1) { background: #ef4444; }
-.terminal-dots span:nth-child(2) { background: #f59e0b; }
-.terminal-dots span:nth-child(3) { background: #10b981; }
-
-.console-body {
-  flex-grow: 1;
-  padding: 20px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-y: auto;
-  min-height: 300px;
-}
-
-.console-empty {
-  color: #475569;
-}
-
-.log-line {
-  margin-bottom: 8px;
-  display: flex;
-  gap: 12px;
-}
-
-.timestamp {
-  color: #8b5cf6;
-  opacity: 0.8;
-}
-
-.msg {
-  color: #cbd5e1;
-}
-
-.msg.success {
-  color: #10b981;
-  font-weight: 600;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-/* Result Action */
-.result-action {
-  padding: 20px;
-  background: rgba(16, 185, 129, 0.05);
-  border-top: 1px solid rgba(16, 185, 129, 0.2);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  animation: slideUp 0.4s ease-out;
-}
-
-.result-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #10b981;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (max-width: 900px) {
-  .ai-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

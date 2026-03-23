@@ -1,326 +1,958 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { 
-  Pencil, MoveUpRight, Circle, Square, 
-  Minus, Trash2, MousePointer2
-} from 'lucide-vue-next'
+import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
+import Konva from 'konva'
 import { useAnalystStore } from '../store/analyst'
 
 const props = defineProps<{
   active: boolean
   currentTime: number
+  activeClipId?: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'frame-cleared'): void
 }>()
 
 const analystStore = useAnalystStore()
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const tempCanvasRef = ref<HTMLCanvasElement | null>(null)
-const ctx = ref<CanvasRenderingContext2D | null>(null)
-const tempCtx = ref<CanvasRenderingContext2D | null>(null)
+const containerRef = ref<HTMLDivElement | null>(null)
+
+// Konva variables
+let stage: Konva.Stage | null = null
+let mainLayer: Konva.Layer | null = null
+let transformer: Konva.Transformer | null = null
+
+// Undo History Stack
+const historyStack = ref<string[]>([])
+const pushHistory = () => {
+  if (historyStack.value.length > 50) historyStack.value.shift()
+  historyStack.value.push(JSON.stringify(analystStore.drawings))
+}
+const undo = () => {
+  if (historyStack.value.length > 0) {
+    const prevStateStr = historyStack.value.pop()
+    if (prevStateStr) {
+      analystStore.drawings = JSON.parse(prevStateStr)
+      localStorage.setItem('edapp_analyst_drawings', JSON.stringify(analystStore.drawings))
+      transformer?.nodes([])
+      renderDrawings()
+    }
+  }
+}
+
+import { storeToRefs } from 'pinia'
 
 const isDrawing = ref(false)
-const currentTool = ref<'pencil' | 'line' | 'arrow' | 'circle' | 'rect'>('pencil')
-const color = ref('#ffeb3b')
-const currentPoints = ref<{ x: number, y: number }[]>([])
+const { drawingTool: currentTool, drawingColor: color, isDrawingFilled: isFilled } = storeToRefs(analystStore)
+const defaultDuration = ref(5) // Tiempo visible por defecto (en segundos)
 
-// Draw settings
-const LINE_WIDTH = 4
-const VISIBILITY_WINDOW = 0.8 // Draw stays visible for 0.8 seconds around its timestamp
+// Inline Text Entry
+const isTypingText = ref(false)
+const textInputPos = ref({ x: 0, y: 0 })
+const textInputValue = ref('')
+const textInputRef = ref<HTMLTextAreaElement | null>(null)
+
+let currentShape: Konva.Shape | Konva.Line | Konva.Group | null = null
+let preventRenderDrawings = false // used to prevent recreate while dragging
+
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
-  initCanvases()
-  window.addEventListener('resize', resizeCanvas)
+  initKonva()
+  
+  // Observe the container itself — it changes when the aspect-ratio box resizes
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => handleResize())
+    })
+    resizeObserver.observe(containerRef.value)
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    setTimeout(handleResize, 150)
+  })
+
+  window.addEventListener('keydown', handleKeyDown)
+  requestAnimationFrame(handleResize)
 })
 
-const initCanvases = () => {
-  if (canvasRef.value && tempCanvasRef.value) {
-    ctx.value = canvasRef.value.getContext('2d')
-    tempCtx.value = tempCanvasRef.value.getContext('2d')
-    resizeCanvas()
-    render()
-  }
-}
+onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', handleResize)
+  if (resizeObserver) resizeObserver.disconnect()
+  window.removeEventListener('keydown', handleKeyDown)
+  if (stage) stage.destroy()
+})
 
-const resizeCanvas = () => {
-  const container = canvasRef.value?.parentElement
-  if (container && canvasRef.value && tempCanvasRef.value) {
-    const { clientWidth, clientHeight } = container
-    canvasRef.value.width = clientWidth
-    canvasRef.value.height = clientHeight
-    tempCanvasRef.value.width = clientWidth
-    tempCanvasRef.value.height = clientHeight
-    render()
+watch(() => props.active, (val) => {
+  if (val) {
+    setTimeout(handleResize, 50)
   }
-}
+})
 
-const getMousePos = (e: MouseEvent) => {
-  const rect = canvasRef.value!.getBoundingClientRect()
-  return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top
+const handleKeyDown = (e: KeyboardEvent) => {
+  // Ignorar inputs y modales
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+  // Ctrl + Z (Deshacer)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault()
+    undo()
+    return
   }
-}
 
-const startDrawing = (e: MouseEvent) => {
   if (!props.active) return
-  isDrawing.value = true
-  const { x, y } = getMousePos(e)
-  currentPoints.value = [{ x, y }]
-}
 
-const draw = (e: MouseEvent) => {
-  if (!isDrawing.value || !props.active) return
-  const { x, y } = getMousePos(e)
-  
-  if (currentTool.value === 'pencil') {
-    currentPoints.value.push({ x, y })
-    drawTemp()
-  } else {
-    // For shapes, we only need start and current end point
-    if (currentPoints.value.length > 1) {
-      currentPoints.value[1] = { x, y }
-    } else {
-      currentPoints.value.push({ x, y })
+  // Borrar selección (Delete/Backspace)
+  if ((e.key === 'Backspace' || e.key === 'Delete') && transformer) {
+    const nodes = transformer.nodes()
+    if (nodes.length > 0) {
+      pushHistory() // Save state before Delete
+      const selectedIds = nodes.map(n => n.id())
+      selectedIds.forEach(sid => analystStore.removeDrawing(sid))
+      nodes.forEach(n => n.destroy())
+      transformer.nodes([])
+      renderDrawings()
     }
-    drawTemp()
+    return
+  }
+
+  // Atajos de Herramientas (1 Letra)
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    const key = e.key.toLowerCase()
+    const validKeys: Record<string, typeof currentTool.value> = {
+      'v': 'select',
+      'b': 'pencil',
+      'l': 'line',
+      'a': 'arrow',
+      'c': 'circle',
+      'r': 'rect',
+      't': 'triangle',
+      'k': 'poly',
+      'x': 'text',
+      'm': 'marker',
+      'd': 'dashed-arrow',
+      's': 'spotlight',
+      'e': 'eraser'
+    }
+    if (validKeys[key]) currentTool.value = validKeys[key]
+    else if (key === 'f') isFilled.value = !isFilled.value
   }
 }
 
-const stopDrawing = () => {
-  if (!isDrawing.value) return
-  isDrawing.value = false
+const initKonva = () => {
+  if (!containerRef.value) return
+  const { clientWidth, clientHeight } = containerRef.value.parentElement || document.body
   
-  if (currentPoints.value.length > 1 && canvasRef.value) {
+  stage = new Konva.Stage({
+    container: containerRef.value,
+    width: clientWidth,
+    height: clientHeight,
+  })
+
+  mainLayer = new Konva.Layer()
+  stage.add(mainLayer)
+  
+  transformer = new Konva.Transformer({
+    nodes: [],
+    padding: 5,
+    borderStroke: '#10b981',
+    anchorStroke: '#10b981',
+    anchorFill: '#ffffff',
+    anchorSize: 8,
+  })
+  mainLayer.add(transformer)
+
+  stage.on('mousedown touchstart', handleMouseDown)
+  stage.on('mousemove touchmove', handleMouseMove)
+  stage.on('mouseup touchend', handleMouseUp)
+
+  stage.on('click tap', (e: any) => {
+    // Select Tool handling
+    if (currentTool.value !== 'select') return
+    
+    let node = e.target
+    if (node === stage || !node) {
+      transformer?.nodes([])
+      return
+    }
+    
+    // Bubble up to the root drawing node (child of mainLayer)
+    while (node.getParent() && node.getParent() !== mainLayer) {
+      node = node.getParent()
+    }
+    
+    if (node.className === 'Transformer') {
+      return
+    }
+    
+    transformer?.nodes([node])
+    mainLayer?.batchDraw()
+  })
+
+  stage.on('dragstart transformstart', () => {
+    pushHistory() // Save state before moving/scaling
+    preventRenderDrawings = true
+  })
+
+  stage.on('dragend transformend', (e: any) => {
+    updateShapeInStore(e.target)
+    preventRenderDrawings = false
+  })
+
+  renderDrawings()
+}
+
+const handleResize = () => {
+  if (!stage || !containerRef.value) return
+
+  const w = containerRef.value.clientWidth
+  const h = containerRef.value.clientHeight
+
+  if (w <= 0 || h <= 0) return
+
+  stage.width(w)
+  stage.height(h)
+
+  // DrawingLayer lives inside: wrapper > .drawing-layer > containerRef
+  // The wrapper also contains the <video> as a sibling of .drawing-layer
+  const drawingLayerDiv = containerRef.value.parentElement
+  const wrapper = drawingLayerDiv?.parentElement
+  const video = wrapper?.querySelector('video') as HTMLVideoElement | null
+
+  if (video && video.videoWidth > 0) {
+    // All coordinates are stored in native video-pixel space
+    // Scale the stage so that (0,0)-(videoWidth,videoHeight) maps to the container
+    const scale = w / video.videoWidth
+    stage.scale({ x: scale, y: scale })
+  } else {
+    stage.scale({ x: 1, y: 1 })
+  }
+
+  stage.batchDraw()
+  renderDrawings()
+}
+
+  let startPos = { x: 0, y: 0 }
+  
+const getPointerPos = () => {
+  if (!stage) return null
+  const transform = stage.getAbsoluteTransform().copy().invert()
+  const pos = stage.getPointerPosition()
+  if (!pos) return null
+  return transform.point(pos)
+}
+
+const handleMouseDown = (e: any) => {
+  if (!props.active || !stage || !mainLayer) return
+
+  // Eraser immediate handling
+  if (currentTool.value === 'eraser') {
+    let node = e?.target
+    if (node === stage || !node) return
+    
+    // Bubble up to the root drawing node (child of mainLayer)
+    while (node.getParent() && node.getParent() !== mainLayer) {
+      node = node.getParent()
+    }
+    
+    if (node.className !== 'Transformer') {
+      const id = node.id()
+      if (id) {
+        pushHistory() // Save state before Eraser
+        analystStore.removeDrawing(id)
+        node.destroy()
+        transformer?.nodes([]) // Clear selection if erased while selected
+        renderDrawings()
+      }
+    }
+    return
+  }
+
+  if (currentTool.value === 'select') return
+
+  pushHistory() // Save state before creating new Shape
+  isDrawing.value = true
+  const pos = getPointerPos()
+  if (!pos) return
+  startPos = pos
+
+  transformer?.nodes([])
+
+  const commonProps = {
+    stroke: color.value,
+    strokeWidth: 3,
+    strokeScaleEnabled: false,
+    lineCap: 'round' as const,
+    lineJoin: 'round' as const,
+    draggable: false,
+    id: `temp_${Date.now()}`
+  }
+
+  if (currentTool.value === 'pencil' || currentTool.value === 'line') {
+    currentShape = new Konva.Line({
+      ...commonProps,
+      points: [pos.x, pos.y, pos.x, pos.y],
+      tension: currentTool.value === 'pencil' ? 0.5 : 0
+    })
+  } else if (currentTool.value === 'arrow' || currentTool.value === 'curved-arrow') {
+    currentShape = new Konva.Arrow({
+      ...commonProps,
+      points: [pos.x, pos.y, pos.x, pos.y],
+      pointerLength: 20,
+      pointerWidth: 20,
+      fill: color.value,
+      tension: currentTool.value === 'curved-arrow' ? 0.5 : 0
+    })
+  } else if (currentTool.value === 'dashed-line') {
+    currentShape = new Konva.Line({
+      ...commonProps,
+      points: [pos.x, pos.y, pos.x, pos.y],
+      dash: [10, 10]
+    })
+  } else if (currentTool.value === 'circle') {
+    currentShape = new Konva.Circle({
+      ...commonProps,
+      x: pos.x,
+      y: pos.y,
+      radius: 0,
+      fill: isFilled.value ? hexToRgba(color.value, 0.4) : 'transparent'
+    })
+  } else if (currentTool.value === 'rect') {
+    currentShape = new Konva.Rect({
+      ...commonProps,
+      x: pos.x,
+      y: pos.y,
+      width: 0,
+      height: 0,
+      fill: isFilled.value ? hexToRgba(color.value, 0.4) : 'transparent'
+    })
+  } else if (currentTool.value === 'triangle') {
+    currentShape = new Konva.RegularPolygon({
+      ...commonProps,
+      x: pos.x,
+      y: pos.y,
+      sides: 3,
+      radius: 0,
+      fill: isFilled.value ? hexToRgba(color.value, 0.4) : 'transparent'
+    })
+  } else if (currentTool.value === 'dashed-arrow') {
+    currentShape = new Konva.Arrow({
+      ...commonProps,
+      points: [pos.x, pos.y, pos.x, pos.y],
+      pointerLength: 15,
+      pointerWidth: 15,
+      fill: color.value,
+      dash: [10, 5],
+      tension: 0
+    })
+  } else if (currentTool.value === 'poly') {
+    currentShape = new Konva.Line({
+      ...commonProps,
+      points: [pos.x, pos.y, pos.x, pos.y],
+      closed: true,
+      fill: hexToRgba(color.value, 0.3)
+    })
+  } else if (currentTool.value === 'text') {
+    // START INLINE TYPING
+    isTypingText.value = true
+    textInputPos.value = pos
+    textInputValue.value = ""
+    setTimeout(() => {
+        if (textInputRef.value) {
+            textInputRef.value.focus()
+        }
+    }, 50)
+    return // Don't create shape yet
+  } else if (currentTool.value === 'marker') {
+    currentShape = new Konva.Group({
+      x: pos.x,
+      y: pos.y,
+      id: `temp_${Date.now()}`,
+      name: 'pulsing-marker',
+      draggable: false
+    })
+    
+    const core = new Konva.Circle({
+      radius: 4,
+      fill: color.value,
+      stroke: 'white',
+      strokeWidth: 1,
+      name: 'marker-core'
+    })
+    
+    const ring = new Konva.Circle({
+      radius: 4,
+      stroke: color.value,
+      strokeWidth: 2,
+      name: 'marker-ring',
+      opacity: 0.5
+    })
+    
+    const group = currentShape as Konva.Group
+    group.add(ring)
+    group.add(core)
+  } else if (currentTool.value === 'spotlight') {
+    currentShape = new Konva.Group({
+      x: 0,
+      y: 0,
+      id: `temp_${Date.now()}`,
+      name: 'pulsing-spotlight',
+      draggable: false
+    })
+
+    const beam = new Konva.Line({
+      points: [pos.x - 1, pos.y, pos.x + 1, pos.y, pos.x + 1, 0, pos.x - 1, 0],
+      closed: true,
+      fillLinearGradientStartPoint: { x: pos.x, y: pos.y },
+      fillLinearGradientEndPoint: { x: pos.x, y: 0 },
+      fillLinearGradientColorStops: [0, hexToRgba(color.value, 0.4), 1, hexToRgba(color.value, 0.0)],
+      name: 'spotlight-beam',
+      strokeWidth: 0
+    })
+    
+    const baseEllipse = new Konva.Ellipse({
+      x: pos.x,
+      y: pos.y,
+      radiusX: 1,
+      radiusY: 0.5,
+      fill: hexToRgba(color.value, 0.1),
+      stroke: color.value,
+      strokeWidth: 2,
+      strokeScaleEnabled: false,
+      shadowColor: color.value,
+      shadowBlur: 15,
+      name: 'spotlight-base'
+    })
+
+    const group = currentShape as Konva.Group
+    group.add(beam)
+    group.add(baseEllipse)
+  }
+
+  if (currentShape) {
+    mainLayer.add(currentShape)
+  }
+}
+
+const handleMouseMove = () => {
+  if (!isDrawing.value || !stage || !currentShape || !mainLayer) return
+
+  const pos = getPointerPos()
+  if (!pos) return
+
+  if (currentTool.value === 'pencil') {
+    const line = currentShape as Konva.Line
+    const newPoints = line.points().concat([pos.x, pos.y])
+    line.points(newPoints)
+  } else if (['line', 'dashed-line', 'arrow', 'curved-arrow', 'dashed-arrow'].includes(currentTool.value)) {
+    const line = currentShape as Konva.Line
+    
+    if (currentTool.value === 'curved-arrow') {
+      const midX = (startPos.x + pos.x) / 2
+      const midY = (startPos.y + pos.y) / 2 - 20 
+      line.points([startPos.x, startPos.y, midX, midY, pos.x, pos.y])
+    } else {
+      line.points([startPos.x, startPos.y, pos.x, pos.y])
+    }
+  } else if (currentTool.value === 'poly') {
+    const line = currentShape as Konva.Line
+    const dx = pos.x - startPos.x
+    const dy = pos.y - startPos.y
+    // Rectangular poly for zones (drag-based)
+    line.points([
+      startPos.x, startPos.y, 
+      pos.x, startPos.y, 
+      pos.x, pos.y, 
+      startPos.x, pos.y
+    ])
+  } else if (currentTool.value === 'circle' || currentTool.value === 'marker') {
+    if (currentTool.value === 'circle') {
+      const circle = currentShape as Konva.Circle
+      const dx = pos.x - (circle.x() || 0)
+      const dy = pos.y - (circle.y() || 0)
+      circle.radius(Math.sqrt(dx * dx + dy * dy))
+    } else {
+      const group = currentShape as Konva.Group
+      const ring = group.findOne('.marker-ring') as Konva.Circle
+      const dx = pos.x - group.x()
+      const dy = pos.y - group.y()
+      const r = Math.sqrt(dx * dx + dy * dy)
+      ring.radius(r)
+    }
+  } else if (currentTool.value === 'text') {
+    const textNode = currentShape as Konva.Text
+    textNode.x(pos.x)
+    textNode.y(pos.y)
+  } else if (currentTool.value === 'rect') {
+    const rect = currentShape as Konva.Rect
+    const dx = pos.x - startPos.x
+    const dy = pos.y - startPos.y
+    rect.width(Math.abs(dx) || 0)
+    rect.height(Math.abs(dy) || 0)
+    rect.x(Math.min(pos.x, startPos.x))
+    rect.y(Math.min(pos.y, startPos.y))
+  } else if (currentTool.value === 'triangle') {
+    const poly = currentShape as Konva.RegularPolygon
+    const dx = pos.x - (poly.x() || 0)
+    const dy = pos.y - (poly.y() || 0)
+    poly.radius(Math.sqrt(dx * dx + dy * dy))
+  } else if (currentTool.value === 'spotlight') {
+    const group = currentShape as Konva.Group
+    const beam = group.findOne('.spotlight-beam') as Konva.Line
+    const base = group.findOne('.spotlight-base') as Konva.Ellipse
+    
+    if (beam && base) {
+      const dx = Math.abs(pos.x - startPos.x)
+      const baseRadiusX = Math.max(dx, 5)
+      const baseRadiusY = baseRadiusX * 0.35 // Perspective ratio
+
+      base.radiusX(baseRadiusX)
+      base.radiusY(baseRadiusY)
+      
+      const baseY = startPos.y
+      const topY = 0 // Fixed to the top of the canvas for the beam origin
+
+      beam.fillLinearGradientStartPoint({ x: startPos.x, y: baseY })
+      beam.fillLinearGradientEndPoint({ x: startPos.x, y: topY })
+
+      // Generate trapezoid for beam (Base is wide, top connects above visually straight or slightly narrow)
+      beam.points([
+        startPos.x - baseRadiusX, baseY,
+        startPos.x + baseRadiusX, baseY,
+        startPos.x + (baseRadiusX * 0.7), topY,
+        startPos.x - (baseRadiusX * 0.7), topY
+      ])
+    }
+  }
+
+  mainLayer.batchDraw()
+}
+
+const finalizeText = () => {
+    if (!isTypingText.value || !stage) return
+    const val = textInputValue.value.trim()
+    
+    if (val.length > 0) {
+        const finalId = `draw_${Date.now()}`
+        const textNode = new Konva.Text({
+            id: finalId,
+            x: textInputPos.value.x,
+            y: textInputPos.value.y,
+            text: val.toUpperCase(),
+            fontSize: 22,
+            fontFamily: 'Outfit, Inter, sans-serif',
+            fontStyle: 'bold',
+            fill: color.value,
+            stroke: 'black',
+            strokeWidth: 0.5,
+            draggable: false,
+            align: 'center'
+        })
+
+        if (mainLayer) {
+            mainLayer.add(textNode)
+            analystStore.addDrawing({
+                clipId: props.activeClipId,
+                time: props.currentTime,
+                data: textNode.toJSON(),
+                keyframes: [],
+                duration: defaultDuration.value
+            })
+            textNode.destroy() // Let the store-based renderer take over
+            renderDrawings()
+        }
+    }
+
+    isTypingText.value = false
+    textInputValue.value = ''
+}
+
+const hexToRgba = (hex: string, alpha: number) => {
+  const r = parseInt(hex.slice(1, 3), 16) || 0
+  const g = parseInt(hex.slice(3, 5), 16) || 0
+  const b = parseInt(hex.slice(5, 7), 16) || 0
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const handleMouseUp = () => {
+  if (!isDrawing.value || !currentShape || !mainLayer || !stage) return
+  isDrawing.value = false
+
+  let isValid = true
+  if (currentShape instanceof Konva.Circle && currentShape.radius() < 5) isValid = false
+  if (currentShape instanceof Konva.Rect && Math.abs(currentShape.width()) < 5) isValid = false
+  if (currentShape instanceof Konva.RegularPolygon && currentShape.radius() < 5) isValid = false
+  
+  // Spotlight validation
+  if (currentShape instanceof Konva.Group) {
+      const base = currentShape.findOne('.spotlight-base') as Konva.Ellipse
+      if (base && base.radiusX() < 5) isValid = false
+  }
+
+  if (isValid) {
+    const finalId = `draw_${Date.now()}`
+    currentShape.id(finalId)
+    
     analystStore.addDrawing({
+      clipId: props.activeClipId,
       time: props.currentTime,
-      tool: currentTool.value,
-      points: [...currentPoints.value],
-      color: color.value,
-      baseWidth: canvasRef.value.width,
-      baseHeight: canvasRef.value.height
+      data: currentShape.toJSON(),
+      keyframes: [],
+      duration: defaultDuration.value
     })
   }
-  
-  currentPoints.value = []
-  tempCtx.value?.clearRect(0, 0, tempCanvasRef.value!.width, tempCanvasRef.value!.height)
-  render()
+
+  currentShape.destroy()
+  currentShape = null
+  renderDrawings()
 }
 
-const drawTemp = () => {
-  if (!tempCtx.value || currentPoints.value.length < 2) return
-  const tCtx = tempCtx.value
-  tCtx.clearRect(0, 0, tempCanvasRef.value!.width, tempCanvasRef.value!.height)
+const updateShapeInStore = (node: Konva.Node) => {
+  const storeId = node.id()
+  const idx = analystStore.drawings.findIndex(d => (d.id || `draw_${d.time}`) === storeId)
   
-  renderObject(tCtx, {
-    tool: currentTool.value,
-    points: currentPoints.value,
-    color: color.value,
-    id: 'temp',
-    time: props.currentTime
-  })
-}
-
-const render = () => {
-  if (!ctx.value || !canvasRef.value) return
-  const mainCtx = ctx.value
-  mainCtx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
-  
-  analystStore.drawings.forEach(drawing => {
-    // Only render if within temporal window
-    const diff = Math.abs(drawing.time - props.currentTime)
-    if (diff < VISIBILITY_WINDOW) {
-      mainCtx.globalAlpha = Math.max(0, 1 - (diff / VISIBILITY_WINDOW))
-      renderObject(mainCtx, drawing)
-    }
-  })
-  mainCtx.globalAlpha = 1
-}
-
-const renderObject = (context: CanvasRenderingContext2D, obj: any) => {
-  context.strokeStyle = obj.color
-  context.fillStyle = obj.color
-  context.lineWidth = LINE_WIDTH
-  context.lineCap = 'round'
-  context.lineJoin = 'round'
-  
-  context.beginPath()
-  
-  if (obj.tool === 'pencil') {
-    context.moveTo(obj.points[0].x, obj.points[0].y)
-    for (let i = 1; i < obj.points.length; i++) {
-        context.lineTo(obj.points[i].x, obj.points[i].y)
-    }
-    context.stroke()
-  } else {
-    const p1 = obj.points[0]
-    const p2 = obj.points[obj.points.length - 1]
+  if (idx !== -1 && analystStore.drawings[idx]) {
+    const d = analystStore.drawings[idx]
+    if (!d) return
     
-    if (obj.tool === 'line') {
-      context.moveTo(p1.x, p1.y)
-      context.lineTo(p2.x, p2.y)
-      context.stroke()
-    } else if (obj.tool === 'rect') {
-      context.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y)
-    } else if (obj.tool === 'circle') {
-      const radius = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))
-      context.arc(p1.x, p1.y, radius, 0, 2 * Math.PI)
-      context.stroke()
-    } else if (obj.tool === 'arrow') {
-      drawArrow(context, p1.x, p1.y, p2.x, p2.y)
-    }
+    // Si estamos editándolo en un tiempo diferente a su creación (pero dentro de su duración) -> Creado un KEYFRAME
+    const DURATION = 0.5
+    if (Math.abs(props.currentTime - d.time) > 0.1 && props.currentTime > d.time && props.currentTime <= d.time + DURATION) {
+       if (!d.keyframes) d.keyframes = []
+       const existingIdx = d.keyframes.findIndex((k: any) => Math.abs(k.time - props.currentTime) < 0.1)
+       
+       const kf = { time: props.currentTime, data: node.toJSON() }
+       if (existingIdx >= 0) d.keyframes[existingIdx] = kf
+       else d.keyframes.push(kf)
+       
+       d.keyframes.sort((a: any, b: any) => a.time - b.time) // Sorted by timeline
+       console.log("Keyframe de seguimiento añadido!", kf)
+        d.data = node.toJSON()
+        d.time = props.currentTime
+     }
   }
+  
+  localStorage.setItem('edapp_analyst_drawings', JSON.stringify(analystStore.drawings))
 }
 
-const drawArrow = (context: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) => {
-  const headlen = 20
-  const angle = Math.atan2(y2 - y1, x2 - x1)
+const interpolateJSON = (jsonStart: string, jsonEnd: string, tRatio: number): string => {
+   try {
+     const s1 = JSON.parse(jsonStart)
+     const s2 = JSON.parse(jsonEnd)
+     const a1 = s1.attrs
+     const a2 = s2.attrs
+     
+     const lerp = (v1: number, v2: number) => v1 + (v2 - v1) * tRatio
+     const getNum = (obj: any, key: string, def: number) => typeof obj[key] === 'number' ? obj[key] : def
+     
+     a1.x = lerp(getNum(a1, 'x', 0), getNum(a2, 'x', 0))
+     a1.y = lerp(getNum(a1, 'y', 0), getNum(a2, 'y', 0))
+     a1.width = lerp(getNum(a1, 'width', 0), getNum(a2, 'width', 0))
+     a1.height = lerp(getNum(a1, 'height', 0), getNum(a2, 'height', 0))
+     a1.radius = lerp(getNum(a1, 'radius', 0), getNum(a2, 'radius', 0))
+     a1.scaleX = lerp(getNum(a1, 'scaleX', 1), getNum(a2, 'scaleX', 1))
+     a1.scaleY = lerp(getNum(a1, 'scaleY', 1), getNum(a2, 'scaleY', 1))
+     a1.rotation = lerp(getNum(a1, 'rotation', 0), getNum(a2, 'rotation', 0))
+     
+     // Interpolate points array (lines, arrows)
+     if(a1.points && a2.points && a1.points.length === a2.points.length) {
+       a1.points = a1.points.map((p: number, i: number) => lerp(p, a2.points[i]!))
+     }
+     
+     s1.attrs = a1
+     return JSON.stringify(s1)
+   } catch(e) {
+     return jsonStart // fallback
+   }
+}
+
+const renderDrawings = () => {
+  if (!stage || !mainLayer || preventRenderDrawings) return
+
+  const selectedIds = transformer?.nodes().map(n => n.id()) || []
   
-  // Base line
-  context.moveTo(x1, y1)
-  context.lineTo(x2, y2)
-  context.stroke()
-  
-  // Arrow head
-  context.beginPath()
-  context.moveTo(x2, y2)
-  context.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6))
-  context.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6))
-  context.closePath()
-  context.fill()
+  const visibleDrawings = analystStore.drawings.filter(d => {
+    if (d.clipId && d.clipId !== props.activeClipId) return false
+    const DURATION = 0.5
+    // Sync with AnalystView auto-pause threshold (0.1s) to ensure visibility during tactical pause
+    return props.currentTime >= (d.time - 0.1) && props.currentTime <= d.time + DURATION
+  })
+  const visibleIds = new Set(visibleDrawings.map(d => d.id || `draw_${d.time}`))
+
+  // 1. Destroy nodes that are no longer visible
+  mainLayer.getChildren((node) => node.className !== 'Transformer').forEach(n => {
+     const nid = n.id()
+     if (!visibleIds.has(nid)) {
+       if (selectedIds.includes(nid)) {
+         transformer!.nodes(transformer!.nodes().filter(tn => tn.id() !== nid))
+       }
+       n.destroy()
+     }
+  })
+
+  // 2. Set/Update visible drawings
+  visibleDrawings.forEach(d => {
+    const drawId = d.id || `draw_${d.time}`
+    
+    let nodeDataString = d.data
+    const DURATION = 0.5
+
+    // Keyframe interpolation logic
+    if (d.keyframes && d.keyframes.length > 0) {
+      const states = [{ time: d.time, data: d.data }, ...d.keyframes]
+      let st1 = states[0]!
+      let st2 = states[states.length - 1]!
+      
+      for (let i = 0; i < states.length - 1; i++) {
+         const currentState = states[i]
+         const nextState = states[i+1]
+         if (currentState && nextState && props.currentTime >= currentState.time && props.currentTime <= nextState.time) {
+            st1 = currentState
+            st2 = nextState
+            break
+         }
+      }
+      
+      if (st1 && st2) {
+        if (props.currentTime > st2.time) {
+           nodeDataString = st2.data
+        } else if (st1.time !== st2.time) {
+           const ratio = (props.currentTime - st1.time) / (st2.time - st1.time)
+           nodeDataString = interpolateJSON(st1.data, st2.data, ratio)
+        }
+      }
+    }
+
+    try {
+       const parsed = JSON.parse(nodeDataString)
+       
+       const existingNode = mainLayer!.findOne(`#${drawId}`)
+       
+       const applyStrokeScaleFalse = (n: any) => {
+         if (n.setAttr) n.setAttr('strokeScaleEnabled', false)
+         if (n.getChildren) n.getChildren().forEach(applyStrokeScaleFalse)
+       }
+       
+       // Efecto Fade Out opcional al final
+       const timeLeft = (d.time + DURATION) - props.currentTime
+       let targetOpacity = 1
+       if (timeLeft < 0.5) targetOpacity = Math.max(0, timeLeft / 0.5)
+       
+       if (existingNode) {
+          // UPDATE ALREADY VISIBLE NODE
+          existingNode.setAttrs(parsed.attrs)
+          existingNode.id(drawId) // CRITICAL: ensure temporary parsed id doesn't overwrite store UUID
+          existingNode.opacity(targetOpacity)
+          applyStrokeScaleFalse(existingNode)
+
+          // Animation loops
+          if (parsed.attrs.name?.includes('pulsing-spotlight')) {
+             if (existingNode instanceof Konva.Circle) existingNode.radius(parsed.attrs.radius * (Math.sin(props.currentTime * 12) * 0.15 + 0.85))
+             else if (existingNode instanceof Konva.Group) existingNode.opacity(targetOpacity * (Math.sin(props.currentTime * 10) * 0.2 + 0.8))
+          } else if (parsed.attrs.name?.includes('pulsing-marker')) {
+             const ring = existingNode.findOne('.marker-ring')
+             if (ring) {
+                const pulse = (Math.sin(props.currentTime * 8) * 0.3 + 0.7)
+                ring.scale({ x: pulse, y: pulse })
+                ring.opacity(targetOpacity * (1.2 - pulse))
+             }
+          }
+       } else {
+          // CREATE NEW NODE
+          const node = Konva.Node.create(parsed)
+          node.draggable(currentTool.value === 'select')
+          node.id(drawId) // CRITICAL: overwrite parsed id with UUID
+          node.opacity(targetOpacity)
+          applyStrokeScaleFalse(node)
+
+          // Animation loop initial
+          if (parsed.attrs.name?.includes('pulsing-spotlight')) {
+             if (node instanceof Konva.Circle) node.radius(parsed.attrs.radius * (Math.sin(props.currentTime * 12) * 0.15 + 0.85))
+             else if (node instanceof Konva.Group) node.opacity(targetOpacity * (Math.sin(props.currentTime * 10) * 0.2 + 0.8))
+          } else if (parsed.attrs.name?.includes('pulsing-marker')) {
+             const ring = node.findOne('.marker-ring')
+             if (ring) {
+                const pulse = (Math.sin(props.currentTime * 8) * 0.3 + 0.7)
+                ring.scale({ x: pulse, y: pulse })
+                ring.opacity(targetOpacity * (1.2 - pulse))
+             }
+          }
+          mainLayer?.add(node)
+       }
+    } catch(e) {}
+  })
+
+  mainLayer.batchDraw()
 }
 
 const clearFrame = () => {
-  analystStore.clearDrawingsAt(props.currentTime)
-  render()
+  const selectedIds = transformer?.nodes().map(n => n.id()) || []
+  pushHistory()
+  
+  if (selectedIds.length > 0) {
+    // If shapes selected → delete only those
+    analystStore.drawings = analystStore.drawings.filter(d => !selectedIds.includes(d.id))
+  } else if (props.activeClipId) {
+    // No selection → delete ALL drawings for this clip
+    analystStore.drawings = analystStore.drawings.filter(d => d.clipId !== props.activeClipId)
+  }
+
+  localStorage.setItem('edapp_analyst_drawings', JSON.stringify(analystStore.drawings))
+  transformer?.nodes([])
+  renderDrawings()
+  emit('frame-cleared')
 }
 
-watch(() => props.currentTime, render)
-watch(() => analystStore.drawings, render, { deep: true })
-watch(() => props.active, (val) => {
-  if (val) setTimeout(resizeCanvas, 0)
+watch(() => props.activeClipId, () => {
+  // Limpiar seleccion actual si el clip cambia
+  transformer?.nodes([])
+  renderDrawings()
 })
+watch(() => props.currentTime, renderDrawings)
+watch(() => analystStore.drawings, renderDrawings, { deep: true })
+watch(() => props.active, (val) => {
+  if (val) setTimeout(handleResize, 50)
+})
+
+watch(currentTool, (newTool) => {
+  if (newTool === 'select') {
+    mainLayer?.getChildren((node) => node.className !== 'Transformer').forEach(n => n.draggable(true))
+    containerRef.value && (containerRef.value.style.cursor = 'default')
+  } else if (newTool === 'eraser') {
+    mainLayer?.getChildren((node) => node.className !== 'Transformer').forEach(n => n.draggable(false))
+    transformer?.nodes([])
+    containerRef.value && (containerRef.value.style.cursor = 'crosshair') // or a custom eraser cursor
+  } else {
+    mainLayer?.getChildren((node) => node.className !== 'Transformer').forEach(n => n.draggable(false))
+    transformer?.nodes([])
+    containerRef.value && (containerRef.value.style.cursor = 'crosshair')
+  }
+  mainLayer?.batchDraw()
+})
+
+watch(color, (newColor) => {
+  const nodes = transformer?.nodes()
+  if (nodes && nodes.length > 0) {
+    nodes.forEach(n => {
+      if (n.className === 'Arrow') {
+        n.setAttr('fill', newColor)
+        n.setAttr('stroke', newColor)
+      } else {
+        n.setAttr('stroke', newColor)
+      }
+      
+      if (n.attrs.fill && n.attrs.fill !== 'transparent') {
+         if (n.attrs.name === 'pulsing-spotlight') {
+           n.setAttr('fill', hexToRgba(newColor, 0.2))
+           n.setAttr('shadowColor', newColor)
+         } else if (n.className !== 'Arrow') {
+           n.setAttr('fill', hexToRgba(newColor, 0.4))
+         }
+      }
+      
+      updateShapeInStore(n)
+    })
+    mainLayer?.batchDraw()
+  }
+})
+
+watch(isFilled, (filled) => {
+  const nodes = transformer?.nodes()
+  if (nodes && nodes.length > 0) {
+    nodes.forEach(n => {
+      if (['Circle', 'Rect', 'RegularPolygon'].includes(n.className)) {
+        if (filled) {
+          n.setAttr('fill', hexToRgba(n.attrs.stroke || color.value, 0.4))
+        } else {
+          n.setAttr('fill', 'transparent')
+        }
+        updateShapeInStore(n)
+      }
+    })
+    mainLayer?.batchDraw()
+  }
+})
+
+defineExpose({
+  getCanvasElement: () => containerRef.value?.querySelector('canvas'),
+  clearHistoryStack: () => { historyStack.value = [] },
+  clearFrame
+})
+
 </script>
 
 <template>
-  <div class="drawing-layer" :class="{ active: active }">
-    <canvas ref="canvasRef" class="main-canvas"></canvas>
-    <canvas 
-      ref="tempCanvasRef" 
-      class="temp-canvas"
-      @mousedown="startDrawing"
-      @mousemove="draw"
-      @mouseup="stopDrawing"
-      @mouseleave="stopDrawing"
-    ></canvas>
+  <div class="absolute inset-0 z-10 pointer-events-auto overflow-hidden">
+    <div ref="containerRef" class="w-full h-full"></div>
 
-    <div v-if="active" class="drawing-controls glass-card gold-border">
-      <div class="tools-group">
-        <button @click="currentTool = 'pencil'" :class="{ active: currentTool === 'pencil' }" title="Lápiz Libre"><Pencil :size="18" /></button>
-        <button @click="currentTool = 'line'" :class="{ active: currentTool === 'line' }" title="Distancia"><Minus :size="18" /></button>
-        <button @click="currentTool = 'arrow'" :class="{ active: currentTool === 'arrow' }" title="Vector Movimiento"><MoveUpRight :size="18" /></button>
-        <button @click="currentTool = 'circle'" :class="{ active: currentTool === 'circle' }" title="Zona / Jugador"><Circle :size="18" /></button>
-        <button @click="currentTool = 'rect'" :class="{ active: currentTool === 'rect' }" title="Bloque"><Square :size="18" /></button>
-      </div>
-      
-      <div class="divider"></div>
-      
-      <div class="colors-group">
-        <div class="color-swatches">
-           <div @click="color = '#ffeb3b'" class="swatch" :style="{ background: '#ffeb3b' }" :class="{ active: color === '#ffeb3b' }"></div>
-           <div @click="color = '#ef4444'" class="swatch" :style="{ background: '#ef4444' }" :class="{ active: color === '#ef4444' }"></div>
-           <div @click="color = '#3b82f6'" class="swatch" :style="{ background: '#3b82f6' }" :class="{ active: color === '#3b82f6' }"></div>
-        </div>
-        <button @click="clearFrame" class="clear-btn" title="Borrar este frame"><Trash2 :size="18" /></button>
-      </div>
-    </div>
-    
-    <!-- Timeline Drawing Indicators -->
-    <div v-if="active" class="frame-indicator">
-       <MousePointer2 :size="12" />
-       Frame Analizado: {{ currentTime.toFixed(2) }}s
+    <!-- Inline Text Input Overlay -->
+    <div 
+        v-if="isTypingText"
+        class="absolute"
+        :style="{ 
+            left: (textInputPos.x * (stage?.scaleX() || 1)) + 'px', 
+            top: (textInputPos.y * (stage?.scaleY() || 1)) + 'px',
+            transform: 'translate(-50%, -50%)'
+        }"
+    >
+        <textarea
+            ref="textInputRef"
+            v-model="textInputValue"
+            class="bg-black/80 text-white border-2 border-primary rounded-lg p-2 font-bold uppercase text-lg outline-none min-w-[120px] max-w-[300px] shadow-2xl overflow-hidden resize-none"
+            rows="1"
+            placeholder="Escribir..."
+            @blur="finalizeText"
+            @keydown.enter.prevent="finalizeText"
+            @keydown.esc.stop="isTypingText = false"
+        ></textarea>
     </div>
   </div>
 </template>
 
 <style scoped>
-.drawing-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
-  pointer-events: none;
-}
-
-.drawing-layer.active {
-  pointer-events: auto;
-}
-
-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.temp-canvas {
-  cursor: crosshair;
-}
 
 .drawing-controls {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 12px;
-  padding: 12px;
+  padding: 8px 16px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(10px);
   pointer-events: auto;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  align-items: center;
+  width: auto;
 }
 
 .tools-group, .colors-group {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  gap: 8px;
   align-items: center;
 }
 
-.color-swatches {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: transform 0.2s;
-}
-
-.swatch:hover { transform: scale(1.2); }
-.swatch.active { border-color: white; transform: scale(1.1); }
-
 .divider {
-  height: 1px;
+  width: 1px;
+  height: 24px;
   background: rgba(255, 255, 255, 0.1);
+  margin: 0;
 }
 
 button {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border-radius: 8px;
   color: #94a3b8;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 button:hover {
@@ -329,37 +961,9 @@ button:hover {
 }
 
 button.active {
-  background: #3b82f6;
-  border-color: #60a5fa;
+  background: #10b981;
+  border-color: #34d399;
   color: white;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
-}
-
-.clear-btn:hover {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.4);
-}
-
-.frame-indicator {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.6);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #3b82f6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.gold-border {
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
 }
 </style>

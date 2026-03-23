@@ -46,6 +46,12 @@ const router = createRouter({
         name: 'analyst-console',
         component: () => import('../views/AnalystConsoleView.vue'),
         meta: { requiresAuth: false }
+    },
+    {
+        path: '/analyst/video',
+        name: 'analyst-video',
+        component: () => import('../views/AnalystVideoView.vue'),
+        meta: { requiresAuth: false }
     }
   ]
 })

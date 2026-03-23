@@ -1,19 +1,25 @@
 <script setup lang="ts">
 import { useAuthStore } from './store/auth'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import { computed } from 'vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const handleLogout = () => {
   auth.logout()
   router.push('/login')
 }
+
+const isExternalTool = computed(() => {
+  return route.name === 'analyst-console' || route.name === 'analyst-video'
+})
 </script>
 
 <template>
   <div class="app-layout min-h-screen bg-surface text-on-background">
-    <template v-if="auth.isAuthenticated">
+    <template v-if="auth.isAuthenticated && !isExternalTool">
       <!-- TopNavBar -->
       <nav class="fixed top-0 w-full z-50 bg-[#070e1d]/80 backdrop-blur-xl border-b border-primary/15 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex justify-between items-center px-6 h-16">
         <div class="flex items-center gap-8">

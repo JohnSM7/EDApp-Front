@@ -1,10 +1,9 @@
-import type { Drawing } from '../store/analyst'
-
 export async function recordVideoSegment(
   videoElement: HTMLVideoElement, 
   startTime: number, 
   endTime: number,
-  drawings: Drawing[] = []
+  overlayCanvas: HTMLCanvasElement | null = null,
+  clipInfo: { name: string, description?: string } | null = null
 ): Promise<{ blob: Blob, extension: string }> {
   const formats = [
     { mime: 'video/mp4;codecs=avc1', ext: 'mp4' },
@@ -44,8 +43,101 @@ export async function recordVideoSegment(
         try { recorder.stop(); } catch(e) { /* ignore */ }
       }
       videoElement.removeEventListener('seeked', onSeeked);
-      videoElement.removeEventListener('playing', startLoop);
-      videoElement.removeEventListener('pause', stopLoop);
+    };
+
+    const stopLoop = () => {
+      isProcessing = false;
+      if (timerId) clearTimeout(timerId);
+    };
+
+    const drawFrame = () => {
+      if (!ctx) return;
+      
+      // 1. Draw strict native video backing
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      
+      // 2. Composite Live DOM Konva WebGL Canvas directly on top matching dimensions precisely
+      if (overlayCanvas) {
+         ctx.drawImage(overlayCanvas, 0, 0, canvas.width, canvas.height);
+      }
+      
+      const currentTime = videoElement.currentTime;
+
+      // 3. Draw Tactical Clip Title Overlay (Bottom Left, matching platform design)
+      if (clipInfo && currentTime >= startTime && currentTime <= endTime) {
+         // ... (existing title drawing)
+         // (I'll keep the previous title drawing logic and just append the pause indicator part)
+         let alpha = 1;
+         const timeIn = currentTime - startTime;
+         const timeToEnd = endTime - currentTime;
+         if (timeIn < 0.5) alpha = timeIn / 0.5;
+         else if (timeToEnd < 0.5) alpha = timeToEnd / 0.5;
+         ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+         
+         const padX = 24;
+         const padY = 16;
+         const margin = 50; 
+         ctx.font = 'bold 36px Outfit, Inter, sans-serif'; 
+         const textWidth = ctx.measureText(clipInfo.name.toUpperCase()).width;
+         ctx.font = '20px Outfit, Inter, sans-serif';
+         let descWidth = 0;
+         if (clipInfo.description) descWidth = ctx.measureText(clipInfo.description).width;
+         const boxWidth = Math.max(textWidth, descWidth) + padX * 2 + 10;
+         const boxHeight = clipInfo.description ? 100 : 70;
+         const boxX = margin;
+         const boxY = canvas.height - boxHeight - margin;
+         
+         ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+         ctx.beginPath();
+         ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 12);
+         ctx.fill();
+         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+         ctx.lineWidth = 1;
+         ctx.stroke();
+         ctx.fillStyle = '#10b981';
+         ctx.fillRect(boxX, boxY + 12, 4, boxHeight - 24);
+         ctx.fillStyle = '#ffffff';
+         ctx.font = 'bold 36px Outfit, Inter, sans-serif';
+         ctx.textAlign = 'left';
+         ctx.textBaseline = 'top';
+         ctx.fillText(clipInfo.name.toUpperCase(), boxX + padX, boxY + padY); 
+         if (clipInfo.description) {
+           ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+           ctx.font = '20px Outfit, Inter, sans-serif';
+           ctx.fillText(clipInfo.description, boxX + padX, boxY + padY + 45);
+         }
+         ctx.globalAlpha = 1;
+
+         // ADDED: Tactical Pause Indicator (Red Bubble at top)
+         // We detect if it's paused by checking videoElement.paused
+         // During export, pauses are predominantly the tactical 3s pauses
+         if (videoElement.paused && !videoElement.ended) {
+            const pauseText = "PAUSA TÁCTICA (3S)";
+            ctx.font = 'bold 24px Outfit, Inter, sans-serif';
+            const pWidth = ctx.measureText(pauseText).width;
+            const pPadX = 30;
+            const pBoxW = pWidth + pPadX * 2;
+            const pBoxH = 48;
+            const pX = (canvas.width - pBoxW) / 2;
+            const pY = 60;
+
+            // Pulsing effect using real time
+            const pulse = (Math.sin(Date.now() / 200) * 0.15 + 0.85);
+            ctx.globalAlpha = pulse;
+
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.9)'; // Tailwind red-500
+            ctx.beginPath();
+            ctx.roundRect(pX, pY, pBoxW, pBoxH, 24);
+            ctx.fill();
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pauseText, pX + pBoxW / 2, pY + pBoxH / 2);
+            
+            ctx.globalAlpha = 1;
+         }
+      }
     };
 
     const startLoop = () => {
@@ -59,40 +151,13 @@ export async function recordVideoSegment(
       loop();
     };
 
-    const stopLoop = () => {
-      isProcessing = false;
-      if (timerId) clearTimeout(timerId);
-    };
-
-    const drawFrame = () => {
-      if (!ctx) return;
-      
-      // 1. Draw Video
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-      
-      // 2. Composite Drawings
-      const currentTime = videoElement.currentTime;
-      const VISIBILITY_WINDOW = 0.8;
-      
-      drawings.forEach(drawing => {
-        const diff = Math.abs(drawing.time - currentTime);
-        if (diff < VISIBILITY_WINDOW) {
-          ctx.globalAlpha = Math.max(0, 1 - (diff / VISIBILITY_WINDOW));
-          renderDrawing(ctx, drawing);
-        }
-      });
-      ctx.globalAlpha = 1;
-    };
-
     const onSeeked = () => {
       videoElement.removeEventListener('seeked', onSeeked);
       
       let stream: MediaStream;
       try {
-        // Capture canvas stream
         stream = (canvas as any).captureStream(30);
         
-        // Try to add original audio
         const videoStream = (videoElement as any).captureStream ? (videoElement as any).captureStream() : (videoElement as any).mozCaptureStream ? (videoElement as any).mozCaptureStream() : null;
         if (videoStream) {
           const audioTracks = videoStream.getAudioTracks();
@@ -119,8 +184,6 @@ export async function recordVideoSegment(
       recorder.start();
       videoElement.play().then(() => {
         startLoop();
-        videoElement.addEventListener('playing', startLoop);
-        videoElement.addEventListener('pause', stopLoop);
 
         const checkEnd = setInterval(() => {
           if (videoElement.currentTime >= endTime || videoElement.ended) {
@@ -135,55 +198,6 @@ export async function recordVideoSegment(
     };
 
     videoElement.addEventListener('seeked', onSeeked);
-    setTimeout(() => { videoElement.currentTime = startTime; }, 150); // Increased seek delay
+    setTimeout(() => { videoElement.currentTime = startTime; }, 150); 
   });
-}
-
-function renderDrawing(ctx: CanvasRenderingContext2D, drawing: Drawing) {
-  const canvas = ctx.canvas;
-  const scaleX = canvas.width / (drawing.baseWidth || canvas.width);
-  const scaleY = canvas.height / (drawing.baseHeight || canvas.height);
-  const scaleAvg = (scaleX + scaleY) / 2;
-
-  ctx.strokeStyle = drawing.color;
-  ctx.fillStyle = drawing.color;
-  ctx.lineWidth = 6 * scaleAvg; // Dynamic line width
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  
-  ctx.beginPath();
-  
-  if (drawing.tool === 'pencil' && drawing.points && drawing.points[0]) {
-    ctx.moveTo(drawing.points[0].x * scaleX, drawing.points[0].y * scaleY);
-    drawing.points.forEach(p => ctx.lineTo(p.x * scaleX, p.y * scaleY));
-    ctx.stroke();
-  } else if (drawing.points && drawing.points.length >= 2) {
-    const p1 = { x: drawing.points[0]!.x * scaleX, y: drawing.points[0]!.y * scaleY };
-    const p2 = { x: drawing.points[drawing.points.length - 1]!.x * scaleX, y: drawing.points[drawing.points.length - 1]!.y * scaleY };
-    
-    if (drawing.tool === 'line') {
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    } else if (drawing.tool === 'rect') {
-      ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
-    } else if (drawing.tool === 'circle') {
-      const radius = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-      ctx.arc(p1.x, p1.y, radius, 0, 2 * Math.PI);
-      ctx.stroke();
-    } else if (drawing.tool === 'arrow') {
-      const headlen = 25 * scaleAvg;
-      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(p2.x, p2.y);
-      ctx.lineTo(p2.x - headlen * Math.cos(angle - Math.PI / 6), p2.y - headlen * Math.sin(angle - Math.PI / 6));
-      ctx.lineTo(p2.x - headlen * Math.cos(angle + Math.PI / 6), p2.y - headlen * Math.sin(angle + Math.PI / 6));
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
 }
